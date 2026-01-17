@@ -1,0 +1,8 @@
+question,threshold,market_id,condition_id,yes_price,yes_probability,volume,liquidity,direction
+Will the highest temperature in New York City be 31°F or below on January 18?,31,1197644,0x64338b87f3c9d20fea7e9bf57a97b60e6bb72e95ae3fe79f04873fd31fc1d4d7,0.0055,0.0055,7718.33123,3307.71466,below
+Will the highest temperature in New York City be between 32-33°F on January 18?,33,1197645,0x3879f0695a07c04e1bd9dedec02bfad05cb7c1a58669f578a1418b5cf9e88d67,0.0305,0.0305,1408.411365,858.18538,unknown
+Will the highest temperature in New York City be between 34-35°F on January 18?,35,1197646,0xd82ea0c8f9e6b1d3fc5d5a56e16195e25dde8e141c58d7a6a61d9a00f1b71589,0.455,0.455,913.508856,339.5216,unknown
+Will the highest temperature in New York City be between 36-37°F on January 18?,37,1197647,0xccb964e992933c1414fb8f8dbd5dc027a264eafc572089bfd9303033c5909cfb,0.45,0.45,789.462685,267.8384,unknown
+Will the highest temperature in New York City be between 38-39°F on January 18?,39,1197648,0xb1f0bbf0223c084face18eb42df5d7c74d2af20965239d171cfd7cac71989b17,0.07,0.07,1089.712994,387.9406,unknown
+Will the highest temperature in New York City be between 40-41°F on January 18?,41,1197649,0x63ef53b154d080e8f63fefa1c316727e9c7dedd3b453a05b24f2315e8b847373,0.015,0.015,1284.150464,521.84354,unknown
+Will the highest temperature in New York City be 42°F or higher on January 18?,42,1197650,0x8d52d46aed6b138cc29cf5900c5cdeb4ab8a1be7f71a41194d178d9bb40ed607,0.004,0.004,2484.881489,264.08029,above
