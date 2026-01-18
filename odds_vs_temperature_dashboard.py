@@ -32,11 +32,14 @@ NY_TZ = ZoneInfo("America/New_York")
 from dotenv import load_dotenv
 load_dotenv()
 
-# NOAA API Key - try Streamlit secrets first, then environment variable
+# API Keys - try Streamlit secrets first, then environment variable
 try:
     NOAA_API_KEY = st.secrets.get("NOAA_API_KEY")
+    VISUAL_CROSSING_API_KEY = st.secrets.get("VISUAL_CROSSING_API_KEY")
 except:
     NOAA_API_KEY = os.getenv("NOAA_API_KEY")
+    VISUAL_CROSSING_API_KEY = os.getenv("VISUAL_CROSSING_API_KEY")
+    VISUAL_CROSSING_API_KEY = os.getenv("VISUAL_CROSSING_API_KEY")
 
 # Page config
 st.set_page_config(
@@ -63,6 +66,106 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Cache data
+@st.cache_data(ttl=3600)  # Cache for 1 hour since historical forecasts don't change
+def fetch_visual_crossing_forecast(forecast_time, target_date):
+    """
+    Fetch historical forecast from Visual Crossing Timeline API.
+    Shows what the forecast was at a specific time for the target date.
+    
+    Args:
+        forecast_time: datetime when the forecast was issued
+        target_date: date being forecasted
+    
+    Returns:
+        DataFrame with hourly forecast data
+    """
+    if not VISUAL_CROSSING_API_KEY or VISUAL_CROSSING_API_KEY == "your_visual_crossing_key_here":
+        st.error("Visual Crossing API key not configured. Add it to your .env file.")
+        return None
+    
+    # Visual Crossing Weather API
+    # Note: Visual Crossing doesn't provide "historical forecasts" - it provides historical actual weather
+    # For forecast data, we need to use their current forecast API or historical weather data
+    
+    # Using historical weather data as a proxy (actual temps that occurred)
+    location = "LaGuardia Airport,NY,US"
+    
+    # Get data for target date + 3 days
+    start_date = target_date.isoformat()
+    end_date = (target_date + timedelta(days=3)).isoformat()
+    
+    url = f"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{location}/{start_date}/{end_date}"
+    
+    params = {
+        'key': VISUAL_CROSSING_API_KEY,
+        'unitGroup': 'us',  # Fahrenheit
+        'include': 'hours',  # Hourly data
+        'contentType': 'json',
+        'elements': 'datetime,temp'
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        
+        # Check for API errors
+        if response.status_code == 401:
+            st.error("❌ Visual Crossing API key is invalid")
+            return None
+        elif response.status_code == 429:
+            st.error("❌ Visual Crossing API rate limit exceeded (1000 calls/day)")
+            return None
+        elif response.status_code != 200:
+            st.error(f"❌ Visual Crossing API error: {response.status_code} - {response.text[:200]}")
+            return None
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'days' not in data:
+            st.warning("No forecast data returned from Visual Crossing")
+            return None
+        
+        # Parse hourly forecast data
+        records = []
+        for day in data['days']:
+            day_date = datetime.fromisoformat(day['datetime']).date()
+            
+            if 'hours' in day:
+                for hour in day['hours']:
+                    hour_time = datetime.strptime(hour['datetime'], '%H:%M:%S').time()
+                    timestamp = datetime.combine(day_date, hour_time).replace(tzinfo=NY_TZ)
+                    
+                    temp = hour.get('temp')
+                    if temp is not None:
+                        records.append({
+                            'timestamp': timestamp,
+                            'temp_f': temp,
+                            'forecast_issued': forecast_time,
+                            'source': 'Visual Crossing'
+                        })
+        
+        if not records:
+            st.warning("No temperature data in Visual Crossing response")
+            return None
+        
+        df = pd.DataFrame(records)
+        df = df.sort_values('timestamp')
+        
+        return df
+        
+    except requests.exceptions.Timeout:
+        st.error("❌ Visual Crossing API timeout - try again")
+        return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Visual Crossing API request error: {str(e)}")
+        return None
+    except Exception as e:
+        st.error(f"❌ Error processing Visual Crossing data: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+        return None
+
+
 @st.cache_data(ttl=60)
 def fetch_openmeteo_hourly_fallback(start_dt, end_dt):
     """
@@ -467,6 +570,74 @@ show_temp_bands = st.sidebar.checkbox(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔮 Forecast Analysis")
+
+show_forecast = st.sidebar.checkbox(
+    "Show historical forecast",
+    value=False,
+    help="See what the forecast was at a specific time"
+)
+
+# Show API key status
+if VISUAL_CROSSING_API_KEY and VISUAL_CROSSING_API_KEY != "your_visual_crossing_key_here":
+    st.sidebar.success("✓ Visual Crossing API key configured")
+    # Debug: show first/last chars
+    if len(VISUAL_CROSSING_API_KEY) > 8:
+        masked_key = f"{VISUAL_CROSSING_API_KEY[:4]}...{VISUAL_CROSSING_API_KEY[-4:]}"
+        st.sidebar.caption(f"Key: {masked_key}")
+else:
+    st.sidebar.error("❌ Visual Crossing API key not set")
+    st.sidebar.caption("Add VISUAL_CROSSING_API_KEY to .env file")
+    # Debug: show what we got
+    st.sidebar.caption(f"Current value: {VISUAL_CROSSING_API_KEY if VISUAL_CROSSING_API_KEY else 'None'}")
+
+forecast_df = None
+if show_forecast and has_odds:
+    if not VISUAL_CROSSING_API_KEY or VISUAL_CROSSING_API_KEY == "your_visual_crossing_key_here":
+        st.sidebar.error("Please add your Visual Crossing API key to .env")
+    else:
+        # Let user select a time from the odds data
+        st.sidebar.markdown("**Select forecast time:**")
+        
+        # Get unique timestamps from odds data (remove duplicates)
+        odds_times = sorted(odds_df['timestamp'].drop_duplicates())
+        
+        # Sample every 5th timestamp to reduce clutter (or use hourly intervals)
+        # Get hourly timestamps only
+        hourly_times = []
+        seen_hours = set()
+        for t in odds_times:
+            hour_key = (t.date(), t.hour)
+            if hour_key not in seen_hours:
+                hourly_times.append(t)
+                seen_hours.add(hour_key)
+        
+        if len(hourly_times) == 0:
+            hourly_times = odds_times[:10]  # Fallback: show first 10
+        
+        # Create a selectbox with formatted times
+        time_options = [t.strftime('%b %d, %I:%M %p ET') for t in hourly_times]
+        selected_time_str = st.sidebar.selectbox(
+            "When was forecast issued?",
+            options=time_options,
+            index=len(time_options)//2 if len(time_options) > 0 else 0,
+            help="Select when traders saw this forecast (hourly intervals)"
+        )
+        
+        # Get the actual datetime
+        selected_forecast_time = hourly_times[time_options.index(selected_time_str)]
+        
+        # Fetch the forecast
+        with st.spinner(f"Fetching forecast from {selected_time_str}..."):
+            forecast_df = fetch_visual_crossing_forecast(selected_forecast_time, selected_date)
+        
+        if forecast_df is not None:
+            st.sidebar.success(f"✓ Loaded forecast ({len(forecast_df)} hours)")
+
+elif show_forecast and not has_odds:
+    st.sidebar.warning("⚠️ Load odds data first to select forecast times")
+
+st.sidebar.markdown("---")
 refresh_btn = st.sidebar.button("🔄 Refresh Data", width='stretch')
 
 # Current stats
@@ -581,6 +752,31 @@ if has_odds:
         line_color="rgba(0,0,0,0.3)",
         row=1, col=1
     )
+    
+    # Add forecast line if available
+    if forecast_df is not None and not forecast_df.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=forecast_df['timestamp'],
+                y=forecast_df['temp_f'],
+                mode='lines',
+                name=f'Forecast ({selected_forecast_time.strftime("%b %d, %I:%M %p")})',
+                line=dict(color='#9b59b6', width=2, dash='dash'),
+                hovertemplate='Forecast: %{y:.1f}°F<br>%{x}<extra></extra>',
+                showlegend=True
+            ),
+            row=1, col=1
+        )
+        
+        # Add vertical line to mark when forecast was issued
+        fig.add_vline(
+            x=selected_forecast_time.timestamp() * 1000,
+            line_dash="dot",
+            line_color="rgba(155, 89, 182, 0.5)",
+            annotation_text="Forecast issued",
+            annotation_position="top",
+            row=1, col=1
+        )
     
     # Add temperature range bands for displayed buckets
     if show_temp_bands and len(display_buckets) > 0:
@@ -824,7 +1020,10 @@ with col2:
 # Data tables
 st.markdown("---")
 with st.expander("📋 View Raw Data"):
-    tab1, tab2 = st.tabs(["Temperature Data", "Odds Data"])
+    if forecast_df is not None and not forecast_df.empty:
+        tab1, tab2, tab3 = st.tabs(["Temperature Data", "Odds Data", "Forecast Data"])
+    else:
+        tab1, tab2 = st.tabs(["Temperature Data", "Odds Data"])
     
     with tab1:
         temp_display = temp_df[['timestamp', 'temp_f', 'humidity', 'wind_speed_mph']].copy()
@@ -841,6 +1040,36 @@ with st.expander("📋 View Raw Data"):
             st.dataframe(odds_display, width='stretch', height=300)
         else:
             st.info("No odds data available. Run: `python scripts/fetching/fetch_polymarket_historical.py`")
+    
+    if forecast_df is not None and not forecast_df.empty:
+        with tab3:
+            st.markdown(f"**Forecast issued:** {selected_forecast_time.strftime('%B %d, %Y at %I:%M %p ET')}")
+            st.markdown(f"**Forecasting for:** {selected_date.strftime('%B %d, %Y')} + 3 days")
+            st.markdown("---")
+            
+            forecast_display = forecast_df[['timestamp', 'temp_f']].copy()
+            forecast_display['timestamp'] = forecast_display['timestamp'].dt.strftime('%Y-%m-%d %I:%M:%S %p ET')
+            forecast_display.columns = ['Forecast Time', 'Predicted Temp (°F)']
+            
+            # Add a column showing if this is the target date
+            forecast_display['Target Date'] = forecast_df['timestamp'].apply(
+                lambda x: '✓' if x.date() == selected_date else ''
+            )
+            
+            st.dataframe(forecast_display, width='stretch', height=400)
+            
+            # Show summary stats for target date
+            target_forecast = forecast_df[forecast_df['timestamp'].dt.date == selected_date]
+            if not target_forecast.empty:
+                st.markdown("---")
+                st.markdown(f"**Forecast for {selected_date.strftime('%B %d')}:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Predicted High", f"{target_forecast['temp_f'].max():.1f}°F")
+                with col2:
+                    st.metric("Predicted Low", f"{target_forecast['temp_f'].min():.1f}°F")
+                with col3:
+                    st.metric("Predicted Avg", f"{target_forecast['temp_f'].mean():.1f}°F")
 
 # Footer
 st.markdown("---")
