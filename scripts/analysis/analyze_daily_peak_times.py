@@ -2,11 +2,13 @@
 Analyze when daily temperature peaks occur throughout January.
 Uses NOAA historical data to find typical peak times.
 
-Run: python scripts/analyze_daily_peak_times.py
+Run: python scripts/analysis/analyze_daily_peak_times.py
 """
 
 import sys
+import os
 from datetime import date, datetime
+from dotenv import load_dotenv
 
 sys.path.insert(0, '.')
 
@@ -24,8 +26,16 @@ from src.data.weather_scraper import WeatherScraper, WeatherDataError
 
 NY_TZ = ZoneInfo("America/New_York")
 
-# NOAA API Token
-API_KEY = "WSPJBegSQBiSbKgtOTOsIqfZMfCLPaPx"
+# Load environment variables
+load_dotenv()
+
+# NOAA API Token from environment
+API_KEY = os.getenv("NOAA_API_KEY")
+
+if not API_KEY:
+    print("ERROR: NOAA_API_KEY not found in .env file")
+    print("Please add: NOAA_API_KEY=your_key_here to .env")
+    sys.exit(1)
 
 
 def analyze_recent_january_peaks():

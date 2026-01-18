@@ -29,9 +29,30 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Model files (optional - uncomment if models are too large)
-# models/*.pkl
+# Environment variables and secrets
+.env
+.env.local
+.streamlit/secrets.toml
 
-# Data files (optional - uncomment if data is too large)
-# data/raw/*.csv
-# data/processed/*.csv
+# Model files (large files)
+models/*.pkl
+
+# Data files (large files - will be fetched dynamically via APIs)
+data/raw/*.csv
+data/raw/*.json
+data/raw/*.png
+data/processed/*.csv
+data/results/*.csv
+
+# Keep .gitkeep files
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/results/.gitkeep
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*~

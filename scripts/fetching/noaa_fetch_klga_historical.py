@@ -1,19 +1,28 @@
 """
 Fetch historical weather data for KLGA (LaGuardia Airport) from NOAA CDO.
 
-Run: python scripts/noaa_fetch_klga_historical.py
+Run: python scripts/fetching/noaa_fetch_klga_historical.py
 """
 
 import sys
+import os
 from datetime import date
+from dotenv import load_dotenv
 
 sys.path.insert(0, '.')
 
 from src.data.noaa_scraper import NOAAScraper, NOAADataError
 
+# Load environment variables
+load_dotenv()
 
-# NOAA API Token
-API_KEY = "WSPJBegSQBiSbKgtOTOsIqfZMfCLPaPx"
+# NOAA API Token from environment
+API_KEY = os.getenv("NOAA_API_KEY")
+
+if not API_KEY:
+    print("ERROR: NOAA_API_KEY not found in .env file")
+    print("Please add: NOAA_API_KEY=your_key_here to .env")
+    sys.exit(1)
 
 
 def main():

@@ -28,8 +28,15 @@ from src.data.noaa_scraper import NOAAScraper, NOAADataError
 
 NY_TZ = ZoneInfo("America/New_York")
 
-# NOAA API Key
-NOAA_API_KEY = "WSPJBegSQBiSbKgtOTOsIqfZMfCLPaPx"
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+# NOAA API Key - try Streamlit secrets first, then environment variable
+try:
+    NOAA_API_KEY = st.secrets.get("NOAA_API_KEY")
+except:
+    NOAA_API_KEY = os.getenv("NOAA_API_KEY")
 
 # Page config
 st.set_page_config(

@@ -15,13 +15,24 @@ matplotlib>=3.7.0
 plotly>=5.14.0
 
 # Dashboard
-streamlit>=1.28.0
+streamlit>=1.39.0
 
 # Progress bars
 tqdm>=4.65.0
 
+# Date/Time handling
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Environment variables
+python-dotenv>=1.0.0
+
 # Timezone support (for Python < 3.9)
 backports.zoneinfo>=0.2.1;python_version<"3.9"
+tzdata>=2023.3
+
+# For deployment
+watchdog>=3.0.0
 
 # Google Earth Engine (optional - for weathernext)
 # earthengine-api>=0.1.0
