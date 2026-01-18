@@ -135,14 +135,16 @@ def fetch_market_token_ids(event_slug):
         return None
 
 
-def fetch_price_history(token_id, interval='1d', fidelity=5):
+def fetch_price_history(token_id, interval='1d', fidelity=5, start_ts=None, end_ts=None):
     """
     Fetch historical price data for a token.
     
     Args:
         token_id: The CLOB token ID
-        interval: Time interval (1m, 1h, 6h, 1d, 1w, max)
+        interval: Time interval (1m, 1h, 6h, 1d, 1w, max) - only used if start_ts/end_ts not provided
         fidelity: Resolution in minutes (default: 5 for 5-minute intervals)
+        start_ts: Unix timestamp for start time (optional, for historical data)
+        end_ts: Unix timestamp for end time (optional, for historical data)
     
     Returns:
         DataFrame with timestamp and price columns
@@ -151,9 +153,16 @@ def fetch_price_history(token_id, interval='1d', fidelity=5):
     
     params = {
         'market': token_id,
-        'interval': interval,
         'fidelity': fidelity
     }
+    
+    # Use explicit timestamps if provided (works for closed markets!)
+    if start_ts is not None and end_ts is not None:
+        params['startTs'] = int(start_ts)
+        params['endTs'] = int(end_ts)
+    else:
+        # Fall back to interval (only works for active markets)
+        params['interval'] = interval
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -190,14 +199,15 @@ def fetch_price_history(token_id, interval='1d', fidelity=5):
         return pd.DataFrame()
 
 
-def fetch_all_market_histories(event_slug, interval='1d', fidelity=5):
+def fetch_all_market_histories(event_slug, interval='1d', fidelity=5, target_date=None):
     """
     Fetch historical odds for all markets in an event.
     
     Args:
         event_slug: The event identifier
-        interval: Time interval (1m, 1h, 6h, 1d, 1w, max)
+        interval: Time interval (1m, 1h, 6h, 1d, 1w, max) - only used if target_date not provided
         fidelity: Resolution in minutes
+        target_date: datetime object for the event date (enables fetching closed markets)
     
     Returns:
         Dict mapping market questions to DataFrames with historical odds
@@ -208,7 +218,18 @@ def fetch_all_market_histories(event_slug, interval='1d', fidelity=5):
     if not markets:
         return None
     
-    print(f"\nFetching historical odds (interval={interval}, fidelity={fidelity} min)...")
+    print(f"\nFetching historical odds (fidelity={fidelity} min)...")
+    
+    # Calculate time range if target_date provided
+    start_ts = None
+    end_ts = None
+    if target_date is not None:
+        # Markets typically open 2 days before, so fetch from 3 days before to 1 day after
+        start_ts = (target_date - timedelta(days=3)).timestamp()
+        end_ts = (target_date + timedelta(days=1)).timestamp()
+        print(f"  Using date range: {datetime.fromtimestamp(start_ts).date()} to {datetime.fromtimestamp(end_ts).date()}")
+    else:
+        print(f"  Using interval: {interval}")
     
     all_histories = {}
     
@@ -220,7 +241,13 @@ def fetch_all_market_histories(event_slug, interval='1d', fidelity=5):
         
         print(f"  Fetching: {threshold_display}...")
         
-        df = fetch_price_history(token_id, interval=interval, fidelity=fidelity)
+        df = fetch_price_history(
+            token_id, 
+            interval=interval, 
+            fidelity=fidelity,
+            start_ts=start_ts,
+            end_ts=end_ts
+        )
         
         if not df.empty:
             df['threshold'] = threshold
@@ -314,21 +341,32 @@ if __name__ == "__main__":
     print("Polymarket Historical Odds Fetcher")
     print("=" * 70)
     print()
+    print("NOTE: Use startTs/endTs parameters to fetch closed markets!")
+    print("      Provide a target_date to automatically calculate the range.\n")
     
-    # Get tomorrow's event
-    tomorrow = datetime.now() + timedelta(days=1)
-    slug = get_event_slug_for_date(tomorrow)
+    # Example: Fetch December 2, 2025 (a closed market)
+    import sys
     
-    print(f"Event date: {tomorrow.strftime('%B %d, %Y')}")
+    if len(sys.argv) > 1:
+        # Parse date from command line: python script.py 2025-12-02
+        from datetime import datetime
+        date_str = sys.argv[1]
+        target_date = datetime.strptime(date_str, '%Y-%m-%d')
+        print(f"Fetching historical data for: {target_date.strftime('%B %d, %Y')}")
+    else:
+        # Default: tomorrow
+        target_date = datetime.now() + timedelta(days=1)
+        print(f"Fetching current data for: {target_date.strftime('%B %d, %Y')}")
+        print("(To fetch a specific date, run: python script.py YYYY-MM-DD)")
+    
+    slug = get_event_slug_for_date(target_date)
     print(f"Event slug: {slug}\n")
     
-    # Fetch historical odds
-    # interval options: 1m, 1h, 6h, 1d, 1w, max
-    # fidelity: resolution in minutes (5 = 5-minute intervals)
+    # Fetch historical odds with target_date to enable closed market fetching
     histories = fetch_all_market_histories(
         event_slug=slug,
-        interval='1d',  # Last 24 hours
-        fidelity=5      # 5-minute resolution
+        target_date=target_date,  # This enables fetching closed markets!
+        fidelity=60  # 1-hour resolution
     )
     
     if histories:
@@ -345,5 +383,5 @@ if __name__ == "__main__":
     else:
         print("\n" + "=" * 70)
         print("Could not fetch historical data.")
-        print("The market may not exist yet or may not have trading history.")
+        print("The market may not exist or the date range may be incorrect.")
         print("=" * 70)

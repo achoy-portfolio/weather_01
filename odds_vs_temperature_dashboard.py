@@ -66,6 +66,44 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Cache data
+@st.cache_data(ttl=300)  # Cache for 5 minutes since NWS forecast updates frequently
+def fetch_nws_forecast_data():
+    """
+    Fetch current NWS forecast for KLGA.
+    Only works for current/future dates (NWS doesn't provide historical forecasts).
+    
+    Returns:
+        DataFrame with hourly forecast data or None
+    """
+    try:
+        # Import the NWS forecast function
+        sys.path.insert(0, 'scripts/fetching')
+        from fetch_nws_forecast import get_nws_forecast
+        
+        df = get_nws_forecast()
+        
+        if df is not None and not df.empty:
+            # Ensure timezone aware
+            if 'start_time' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['start_time'])
+                if df['timestamp'].dt.tz is None:
+                    df['timestamp'] = df['timestamp'].dt.tz_localize('UTC').dt.tz_convert(NY_TZ)
+                else:
+                    df['timestamp'] = df['timestamp'].dt.tz_convert(NY_TZ)
+                
+                # Rename temperature column
+                if 'temperature' in df.columns:
+                    df = df.rename(columns={'temperature': 'temp_f'})
+                
+                return df[['timestamp', 'temp_f']].copy()
+        
+        return None
+        
+    except Exception as e:
+        # Silently fail - NWS forecast is optional
+        return None
+
+
 @st.cache_data(ttl=3600)  # Cache for 1 hour since historical forecasts don't change
 def fetch_visual_crossing_forecast(forecast_time, target_date):
     """
@@ -397,11 +435,18 @@ def fetch_polymarket_odds(target_date):
             
             yes_token_id = token_ids[0]
             
-            # Fetch price history - try 'max' first, if it seems truncated, fetch in chunks
+            # Fetch price history using explicit timestamps for better historical data
+            # Calculate time range: 3 days before to 1 day after target date
+            start_dt = datetime.combine(target_date, datetime.min.time()) - timedelta(days=3)
+            end_dt = datetime.combine(target_date, datetime.max.time()) + timedelta(days=1)
+            start_ts = int(start_dt.replace(tzinfo=NY_TZ).timestamp())
+            end_ts = int(end_dt.replace(tzinfo=NY_TZ).timestamp())
+            
             price_url = "https://clob.polymarket.com/prices-history"
             params = {
                 'market': yes_token_id,
-                'interval': 'max',  # Get all available data
+                'startTs': start_ts,  # Use explicit timestamps (works for closed markets!)
+                'endTs': end_ts,
                 'fidelity': 5       # 5-minute resolution
             }
             
@@ -592,6 +637,8 @@ else:
     st.sidebar.caption(f"Current value: {VISUAL_CROSSING_API_KEY if VISUAL_CROSSING_API_KEY else 'None'}")
 
 forecast_df = None
+nws_forecast_df = None
+
 if show_forecast and has_odds:
     if not VISUAL_CROSSING_API_KEY or VISUAL_CROSSING_API_KEY == "your_visual_crossing_key_here":
         st.sidebar.error("Please add your Visual Crossing API key to .env")
@@ -627,12 +674,26 @@ if show_forecast and has_odds:
         # Get the actual datetime
         selected_forecast_time = hourly_times[time_options.index(selected_time_str)]
         
-        # Fetch the forecast
-        with st.spinner(f"Fetching forecast from {selected_time_str}..."):
+        # Check if this is a recent/future date (within 7 days)
+        days_from_now = (selected_date - date.today()).days
+        is_recent = abs(days_from_now) <= 7
+        
+        # Fetch Visual Crossing forecast
+        with st.spinner(f"Fetching Visual Crossing forecast from {selected_time_str}..."):
             forecast_df = fetch_visual_crossing_forecast(selected_forecast_time, selected_date)
         
         if forecast_df is not None:
-            st.sidebar.success(f"✓ Loaded forecast ({len(forecast_df)} hours)")
+            st.sidebar.success(f"✓ Visual Crossing: {len(forecast_df)} hours")
+        
+        # Optionally fetch NWS forecast if date is recent/future
+        if is_recent:
+            with st.spinner("Fetching NWS forecast..."):
+                nws_forecast_df = fetch_nws_forecast_data()
+            
+            if nws_forecast_df is not None:
+                st.sidebar.success(f"✓ NWS Forecast: {len(nws_forecast_df)} hours")
+            else:
+                st.sidebar.info("ℹ️ NWS forecast not available")
 
 elif show_forecast and not has_odds:
     st.sidebar.warning("⚠️ Load odds data first to select forecast times")
@@ -680,7 +741,7 @@ if has_odds:
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.1,
+        vertical_spacing=0.15,  # Increased spacing to prevent title overlap
         subplot_titles=('Temperature Readings (°F)', f'Market Odds - {selected_date} (Probability by Range)'),
         row_heights=[0.5, 0.5]
     )
@@ -760,9 +821,9 @@ if has_odds:
                 x=forecast_df['timestamp'],
                 y=forecast_df['temp_f'],
                 mode='lines',
-                name=f'Forecast ({selected_forecast_time.strftime("%b %d, %I:%M %p")})',
+                name=f'Visual Crossing Forecast',
                 line=dict(color='#9b59b6', width=2, dash='dash'),
-                hovertemplate='Forecast: %{y:.1f}°F<br>%{x}<extra></extra>',
+                hovertemplate='VC Forecast: %{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
             row=1, col=1
@@ -775,6 +836,21 @@ if has_odds:
             line_color="rgba(155, 89, 182, 0.5)",
             annotation_text="Forecast issued",
             annotation_position="top",
+            row=1, col=1
+        )
+    
+    # Add NWS forecast line if available
+    if nws_forecast_df is not None and not nws_forecast_df.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=nws_forecast_df['timestamp'],
+                y=nws_forecast_df['temp_f'],
+                mode='lines',
+                name='NWS Forecast',
+                line=dict(color='#e67e22', width=2, dash='dot'),
+                hovertemplate='NWS Forecast: %{y:.1f}°F<br>%{x}<extra></extra>',
+                showlegend=True
+            ),
             row=1, col=1
         )
     
@@ -817,7 +893,7 @@ if has_odds:
     fig.update_yaxes(title_text="Probability", tickformat='.0%', row=2, col=1)
     
     fig.update_layout(
-        height=700,
+        height=750,
         hovermode='x unified',
         template="plotly_white",
         showlegend=True,
@@ -827,7 +903,8 @@ if has_odds:
             y=1.02,
             xanchor="right",
             x=1
-        )
+        ),
+        margin=dict(t=80, b=50, l=50, r=50)  # Add top margin for titles
     )
     
     st.plotly_chart(fig, width='stretch', key=f"main_chart_{selected_date}")
@@ -860,9 +937,11 @@ if has_odds:
         xaxis_title="Temperature Range",
         yaxis_title="Probability",
         yaxis_tickformat='.0%',
+        yaxis_range=[0, latest_by_bucket['probability'].max() * 1.15],  # Add 15% headroom for labels
         height=400,
         showlegend=False,
-        template="plotly_white"
+        template="plotly_white",
+        margin=dict(t=60, b=50, l=50, r=50)  # Add margins
     )
     
     st.plotly_chart(fig_bar, width='stretch', key=f"bar_chart_{selected_date}")
@@ -1020,18 +1099,28 @@ with col2:
 # Data tables
 st.markdown("---")
 with st.expander("📋 View Raw Data"):
+    # Determine number of tabs based on available data
+    tabs_list = ["Temperature Data", "Odds Data"]
     if forecast_df is not None and not forecast_df.empty:
-        tab1, tab2, tab3 = st.tabs(["Temperature Data", "Odds Data", "Forecast Data"])
-    else:
-        tab1, tab2 = st.tabs(["Temperature Data", "Odds Data"])
+        tabs_list.append("Visual Crossing Forecast")
+    if nws_forecast_df is not None and not nws_forecast_df.empty:
+        tabs_list.append("NWS Forecast")
+    if forecast_df is not None and nws_forecast_df is not None:
+        tabs_list.append("Forecast Comparison")
     
-    with tab1:
+    tabs = st.tabs(tabs_list)
+    tab_idx = 0
+    
+    # Tab 1: Temperature Data
+    with tabs[tab_idx]:
         temp_display = temp_df[['timestamp', 'temp_f', 'humidity', 'wind_speed_mph']].copy()
         temp_display['timestamp'] = temp_display['timestamp'].dt.strftime('%Y-%m-%d %I:%M:%S %p ET')
         temp_display.columns = ['Time', 'Temp (°F)', 'Humidity (%)', 'Wind (mph)']
         st.dataframe(temp_display, width='stretch', height=300)
+    tab_idx += 1
     
-    with tab2:
+    # Tab 2: Odds Data
+    with tabs[tab_idx]:
         if has_odds:
             odds_display = odds_df[['timestamp', 'threshold_display', 'probability', 'question']].copy()
             odds_display['timestamp'] = odds_display['timestamp'].dt.strftime('%Y-%m-%d %I:%M:%S %p ET')
@@ -1040,9 +1129,11 @@ with st.expander("📋 View Raw Data"):
             st.dataframe(odds_display, width='stretch', height=300)
         else:
             st.info("No odds data available. Run: `python scripts/fetching/fetch_polymarket_historical.py`")
+    tab_idx += 1
     
+    # Tab 3: Visual Crossing Forecast (if available)
     if forecast_df is not None and not forecast_df.empty:
-        with tab3:
+        with tabs[tab_idx]:
             st.markdown(f"**Forecast issued:** {selected_forecast_time.strftime('%B %d, %Y at %I:%M %p ET')}")
             st.markdown(f"**Forecasting for:** {selected_date.strftime('%B %d, %Y')} + 3 days")
             st.markdown("---")
@@ -1062,7 +1153,7 @@ with st.expander("📋 View Raw Data"):
             target_forecast = forecast_df[forecast_df['timestamp'].dt.date == selected_date]
             if not target_forecast.empty:
                 st.markdown("---")
-                st.markdown(f"**Forecast for {selected_date.strftime('%B %d')}:**")
+                st.markdown(f"**Visual Crossing Forecast for {selected_date.strftime('%B %d')}:**")
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Predicted High", f"{target_forecast['temp_f'].max():.1f}°F")
@@ -1070,6 +1161,86 @@ with st.expander("📋 View Raw Data"):
                     st.metric("Predicted Low", f"{target_forecast['temp_f'].min():.1f}°F")
                 with col3:
                     st.metric("Predicted Avg", f"{target_forecast['temp_f'].mean():.1f}°F")
+        tab_idx += 1
+    
+    # Tab 4: NWS Forecast (if available)
+    if nws_forecast_df is not None and not nws_forecast_df.empty:
+        with tabs[tab_idx]:
+            st.markdown(f"**NWS Current Forecast**")
+            st.markdown(f"**Valid for:** Next 7 days from now")
+            st.markdown("---")
+            
+            nws_display = nws_forecast_df[['timestamp', 'temp_f']].copy()
+            nws_display['timestamp'] = nws_display['timestamp'].dt.strftime('%Y-%m-%d %I:%M:%S %p ET')
+            nws_display.columns = ['Forecast Time', 'Predicted Temp (°F)']
+            
+            # Add a column showing if this is the target date
+            nws_display['Target Date'] = nws_forecast_df['timestamp'].apply(
+                lambda x: '✓' if x.date() == selected_date else ''
+            )
+            
+            st.dataframe(nws_display, width='stretch', height=400)
+            
+            # Show summary stats for target date
+            target_nws = nws_forecast_df[nws_forecast_df['timestamp'].dt.date == selected_date]
+            if not target_nws.empty:
+                st.markdown("---")
+                st.markdown(f"**NWS Forecast for {selected_date.strftime('%B %d')}:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Predicted High", f"{target_nws['temp_f'].max():.1f}°F")
+                with col2:
+                    st.metric("Predicted Low", f"{target_nws['temp_f'].min():.1f}°F")
+                with col3:
+                    st.metric("Predicted Avg", f"{target_nws['temp_f'].mean():.1f}°F")
+        tab_idx += 1
+    
+    # Tab 5: Forecast Comparison (if both available)
+    if forecast_df is not None and nws_forecast_df is not None:
+        with tabs[tab_idx]:
+            st.markdown("### Forecast Comparison")
+            st.markdown(f"**Comparing forecasts for {selected_date.strftime('%B %d, %Y')}**")
+            st.markdown("---")
+            
+            # Get target date data from both
+            vc_target = forecast_df[forecast_df['timestamp'].dt.date == selected_date]
+            nws_target = nws_forecast_df[nws_forecast_df['timestamp'].dt.date == selected_date]
+            
+            if not vc_target.empty and not nws_target.empty:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**Visual Crossing**")
+                    st.metric("High", f"{vc_target['temp_f'].max():.1f}°F")
+                    st.metric("Low", f"{vc_target['temp_f'].min():.1f}°F")
+                    st.metric("Avg", f"{vc_target['temp_f'].mean():.1f}°F")
+                
+                with col2:
+                    st.markdown("**NWS**")
+                    st.metric("High", f"{nws_target['temp_f'].max():.1f}°F")
+                    st.metric("Low", f"{nws_target['temp_f'].min():.1f}°F")
+                    st.metric("Avg", f"{nws_target['temp_f'].mean():.1f}°F")
+                
+                with col3:
+                    st.markdown("**Difference**")
+                    high_diff = vc_target['temp_f'].max() - nws_target['temp_f'].max()
+                    low_diff = vc_target['temp_f'].min() - nws_target['temp_f'].min()
+                    avg_diff = vc_target['temp_f'].mean() - nws_target['temp_f'].mean()
+                    
+                    st.metric("High Δ", f"{high_diff:+.1f}°F")
+                    st.metric("Low Δ", f"{low_diff:+.1f}°F")
+                    st.metric("Avg Δ", f"{avg_diff:+.1f}°F")
+                
+                st.markdown("---")
+                st.markdown("**Interpretation:**")
+                if abs(high_diff) < 2:
+                    st.success("✓ Forecasts agree closely on high temperature")
+                elif high_diff > 0:
+                    st.warning(f"⚠️ Visual Crossing predicts {abs(high_diff):.1f}°F warmer than NWS")
+                else:
+                    st.warning(f"⚠️ NWS predicts {abs(high_diff):.1f}°F warmer than Visual Crossing")
+            else:
+                st.info("No overlapping forecast data for the target date")
 
 # Footer
 st.markdown("---")
