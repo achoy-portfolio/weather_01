@@ -138,7 +138,7 @@ def check_bet_outcome(actual_temp, threshold, threshold_type):
     return False
 
 
-def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=0.25, max_bet_pct=0.05, min_market_prob=0.05):
+def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=0.25, max_bet_pct=0.05, min_market_prob=0.05, min_volume=100, max_bet_vs_volume=0.10):
     """
     Backtest the betting strategy on historical data using multiple lead times.
     
@@ -150,6 +150,8 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
         kelly_fraction: Fraction of Kelly criterion to use (0.25 = quarter Kelly)
         max_bet_pct: Maximum bet as percentage of bankroll (default 5%)
         min_market_prob: Minimum market probability to consider (avoid illiquid markets)
+        min_volume: Minimum market volume required (default $100)
+        max_bet_vs_volume: Maximum bet size as fraction of market volume (default 10%)
     
     Returns:
         DataFrame with all betting opportunities and results
@@ -240,6 +242,8 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
     print(f"  Min Edge: {min_edge:.1%}")
     print(f"  Min EV: {min_ev:.1%}")
     print(f"  Min Market Prob: {min_market_prob:.1%}")
+    print(f"  Min Volume: ${min_volume:,.0f}")
+    print(f"  Max Bet vs Volume: {max_bet_vs_volume:.1%}")
     print(f"  Bankroll: ${bankroll:,.0f}")
     print(f"  Kelly Fraction: {kelly_fraction:.1%}")
     print(f"  Max Bet %: {max_bet_pct:.1%}")
@@ -317,6 +321,7 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
             for _, odds_row in day_odds_snapshot.iterrows():
                 threshold_str = odds_row['threshold']
                 market_prob = odds_row['yes_probability']
+                market_volume = odds_row.get('volume', 0)
                 
                 # Parse threshold
                 try:
@@ -338,16 +343,18 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
                 else:
                     ev = 0
                 
-                # Check if bet meets criteria
+                # Check if bet meets criteria (including liquidity)
                 should_bet = (
                     (edge >= min_edge) and 
                     (ev >= min_ev) and 
                     (market_prob >= min_market_prob) and
-                    (market_prob <= 0.95)  # Avoid near-certain markets
+                    (market_prob <= 0.95) and  # Avoid near-certain markets
+                    (market_volume >= min_volume)  # Require minimum liquidity
                 )
                 
                 # Calculate bet size using Kelly criterion
                 bet_size = 0
+                liquidity_constrained = False
                 if should_bet and market_prob > 0 and market_prob < 1:
                     # Kelly formula: f = (bp - q) / b
                     # where b = odds-1, p = model_prob, q = 1-model_prob
@@ -356,6 +363,12 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
                     kelly = max(0, min(kelly, 1))  # Clamp between 0 and 1
                     bet_size = kelly * kelly_fraction * current_bankroll
                     bet_size = min(bet_size, current_bankroll * max_bet_pct)  # Cap at max_bet_pct of bankroll
+                    
+                    # Apply liquidity constraint - can't bet more than X% of market volume
+                    max_bet_from_volume = market_volume * max_bet_vs_volume
+                    if bet_size > max_bet_from_volume:
+                        bet_size = max_bet_from_volume
+                        liquidity_constrained = True
                 
                 # Check outcome
                 bet_won = check_bet_outcome(actual_max, threshold_value, threshold_type)
@@ -383,11 +396,13 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
                     'threshold_value': threshold_value,
                     'threshold_type': threshold_type,
                     'market_prob': market_prob,
+                    'market_volume': market_volume,
                     'model_prob': model_prob,
                     'edge': edge,
                     'ev': ev,
                     'should_bet': should_bet,
                     'bet_size': bet_size,
+                    'liquidity_constrained': liquidity_constrained,
                     'bet_won': bet_won,
                     'profit': profit,
                     'bankroll': current_bankroll
@@ -408,11 +423,13 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
     total_opportunities = len(results_df)
     bets_placed = results_df['should_bet'].sum()
     bets_won = results_df[results_df['should_bet']]['bet_won'].sum()
+    liquidity_constrained_count = results_df[results_df['should_bet']]['liquidity_constrained'].sum()
     
     print(f"\nTotal Opportunities Analyzed: {total_opportunities}")
     print(f"Bets Placed: {bets_placed}")
     print(f"Bets Won: {bets_won}")
     print(f"Win Rate: {(bets_won / bets_placed * 100) if bets_placed > 0 else 0:.1f}%")
+    print(f"Liquidity Constrained Bets: {liquidity_constrained_count} ({(liquidity_constrained_count / bets_placed * 100) if bets_placed > 0 else 0:.1f}%)")
     
     total_profit = results_df[results_df['should_bet']]['profit'].sum()
     roi = (total_profit / bankroll) * 100
@@ -437,10 +454,11 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
         sample_bets = results_df[results_df['should_bet']].head(10)
         for _, bet in sample_bets.iterrows():
             result = "✅ WON" if bet['bet_won'] else "❌ LOST"
+            liquidity_note = " [LIQUIDITY CAPPED]" if bet['liquidity_constrained'] else ""
             print(f"{bet['date'].strftime('%Y-%m-%d')} ({bet['lead_time']}): {bet['threshold']}")
             print(f"  Forecast: {bet['forecasted_max']:.1f}°F, Actual: {bet['actual_max']:.1f}°F")
             print(f"  Model: {bet['model_prob']:.1%}, Market: {bet['market_prob']:.1%}, Edge: {bet['edge']:+.1%}")
-            print(f"  Bet: ${bet['bet_size']:.2f}, {result}, Profit: ${bet['profit']:+.2f}")
+            print(f"  Volume: ${bet['market_volume']:.0f}, Bet: ${bet['bet_size']:.2f}{liquidity_note}, {result}, Profit: ${bet['profit']:+.2f}")
             print()
     
     return results_df
@@ -453,6 +471,8 @@ if __name__ == '__main__':
         min_edge=0.05,            # Require 5% edge
         min_ev=0.05,              # Require 5% expected value
         min_market_prob=0.05,     # Avoid illiquid markets below 5%
+        min_volume=100,           # Require at least $100 volume
+        max_bet_vs_volume=0.10,   # Max bet = 10% of market volume
         bankroll=1000,            # Start with $1000
         kelly_fraction=0.25,      # Use quarter Kelly
         max_bet_pct=0.05          # Max 5% of bankroll per bet
