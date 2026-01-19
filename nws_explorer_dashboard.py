@@ -28,7 +28,10 @@ st.set_page_config(
     page_title="NWS Temperature Explorer - KLGA",
     page_icon="🌡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "NWS Temperature Explorer Dashboard"
+    }
 )
 
 # Custom CSS for Google Finance-like styling

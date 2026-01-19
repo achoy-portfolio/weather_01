@@ -1,0 +1,69 @@
+{
+  "created_at": "2026-01-18T20:41:39.665067",
+  "sample_size": 361,
+  "basic_statistics": {
+    "mean": 0.614127423822715,
+    "median": 0.7999999999999972,
+    "std": 2.5837109336667905,
+    "min": -8.200000000000003,
+    "max": 7.399999999999999
+  },
+  "percentiles": {
+    "p5": -3.200000000000003,
+    "p10": -2.700000000000003,
+    "p25": -1.2000000000000028,
+    "p50": 0.7999999999999972,
+    "p75": 2.299999999999997,
+    "p90": 3.9000000000000057,
+    "p95": 4.600000000000001
+  },
+  "normality_tests": {
+    "shapiro_wilk": {
+      "statistic": 0.055790892146672766,
+      "p_value": 0.20339713776228985,
+      "is_normal": true
+    },
+    "skewness": -0.28922459504656434,
+    "kurtosis": 0.08645883582621217
+  },
+  "distribution_fit": {
+    "within_1std": {
+      "actual_pct": 63.988919667590025,
+      "expected_pct": 68.3,
+      "std_value": 2.5837109336667905,
+      "matches": true
+    },
+    "within_2std": {
+      "actual_pct": 95.56786703601108,
+      "expected_pct": 95.4,
+      "std_value": 5.167421867333581,
+      "matches": true
+    },
+    "within_3std": {
+      "actual_pct": 99.44598337950139,
+      "expected_pct": 99.7,
+      "std_value": 7.751132801000372,
+      "matches": true
+    }
+  },
+  "confidence_intervals": {
+    "50_pct": {
+      "range": 1.9000000000000057,
+      "description": "50% of forecasts within this range"
+    },
+    "68_pct": {
+      "range": 2.700000000000003,
+      "description": "68% of forecasts within this range"
+    },
+    "90_pct": {
+      "range": 4.300000000000004,
+      "description": "90% of forecasts within this range"
+    },
+    "95_pct": {
+      "range": 5.199999999999996,
+      "description": "95% of forecasts within this range"
+    }
+  },
+  "is_approximately_normal": true,
+  "recommendation": "Use normal distribution assumptions"
+}

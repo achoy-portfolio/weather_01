@@ -1,335 +1,127 @@
-# How the Pipeline Calculates Betting Decisions
+# Betting Strategy Backtest
 
 ## Overview
 
-The pipeline uses **Expected Value (EV)** analysis combined with **Kelly Criterion** position sizing to identify profitable betting opportunities on Polymarket temperature markets.
+This betting strategy uses weather forecast error modeling to find profitable betting opportunities on Polymarket temperature markets.
 
-## Core Concepts
+## How It Works
 
-### 1. Expected Value (EV)
+### 1. Error Model
 
-Expected Value measures the average profit/loss per dollar bet over the long run.
+- Uses historical forecast accuracy data (MAE: 2.17°F, Bias: +0.61°F, Std: 2.58°F)
+- Forecasts are systematically 0.61°F too warm
+- Errors follow a normal distribution
 
-**Formula:**
+### 2. Probability Calculation
 
+For each betting opportunity:
+
+1. Get 9 PM forecast from day before
+2. Adjust for bias: `adjusted_forecast = forecast - 0.61°F`
+3. Calculate model probability using normal distribution
+4. Compare to market probability to find edge
+
+### 3. Bet Sizing
+
+Uses Kelly Criterion with safeguards:
+
+- Quarter Kelly (25% of full Kelly)
+- Max 5% of bankroll per bet
+- Only bet on markets with ≥5% market probability (avoid illiquid markets)
+
+### 4. Bet Criteria
+
+A bet is placed when:
+
+- Edge ≥ 5% (model_prob - market_prob)
+- Expected Value ≥ 5%
+- Market probability between 5% and 95%
+
+## Results Summary
+
+**Overall Performance:**
+
+- 68 bets placed out of 2,156 opportunities
+- 23.5% win rate
+- +172.7% ROI on starting bankroll
+- +34.8% ROI on total wagered
+
+**Key Findings:**
+
+1. **"Above" bets are profitable**
+   - 43.3% win rate
+   - +$1,987 total profit
+   - Model is good at predicting warm temperatures
+
+2. **"Below" bets lose money**
+   - 0% win rate (!)
+   - -$1,140 total loss
+   - Model systematically fails on cold predictions
+
+3. **High edge bets (>30%) are traps**
+   - Only 22.2% win rate
+   - -$50.80 average profit
+   - Model is overconfident on extreme edges
+
+4. **Moderate edge bets (10-20%) perform best**
+   - 33.3% win rate
+   - +$68.68 average profit
+
+## Files
+
+- `scripts/analysis/backtest_betting_strategy.py` - Main backtest script
+- `scripts/analysis/betting_simulator.py` - Results analysis
+- `data/results/backtest_results.csv` - Full results (all opportunities)
+- `data/results/betting_opportunities.csv` - Only bets that were placed
+- `data/results/betting_outcomes.csv` - Win/loss outcomes
+
+## Usage
+
+```bash
+# Run backtest with default parameters
+python scripts/analysis/backtest_betting_strategy.py
+
+# Analyze results
+python scripts/analysis/betting_simulator.py
 ```
-EV = (Model Probability × Payout Multiplier) - 1
-```
 
-**Example:**
+## Strategy Parameters
 
-- Market odds: 40% (implies you get paid $2.50 for every $1 if you win)
-- Your model probability: 50%
-- Payout multiplier: 1 / 0.40 = 2.5
-- EV = (0.50 × 2.5) - 1 = 0.25 = **+25% EV**
-
-This means for every $1 you bet, you expect to make $0.25 profit on average.
-
-### 2. Edge
-
-Edge is the difference between your model's probability and the market's probability.
-
-**Formula:**
-
-```
-Edge = Model Probability - Market Probability
-```
-
-**Example:**
-
-- Model: 50%
-- Market: 40%
-- Edge = 50% - 40% = **+10% edge**
-
-### 3. Kelly Criterion
-
-Kelly Criterion calculates the optimal bet size to maximize long-term growth while managing risk.
-
-**Formula:**
-
-```
-Kelly Fraction = (b × p - q) / b
-
-Where:
-- b = decimal_odds - 1 (net odds)
-- p = probability of winning (your model)
-- q = 1 - p (probability of losing)
-```
-
-**Safety: Fractional Kelly**
-The pipeline uses **Quarter Kelly (25%)** to reduce risk:
-
-```
-Bet Size = Kelly Fraction × 0.25 × Bankroll
-```
-
-## Pipeline Decision Process
-
-### Step 1: Generate Model Prediction
-
-The pipeline predicts tomorrow's peak temperature using:
-
-1. **Historical data** (last 30 days)
-2. **Today's intraday temperatures** (6am, 9am, noon, 3pm)
-3. **NWS forecast** (if available)
-
-**Blended Prediction:**
+You can adjust these in `backtest_betting_strategy.py`:
 
 ```python
-final_pred = (0.6 × NWS_forecast) + (0.4 × ML_model)
+results = backtest_strategy(
+    min_edge=0.05,          # Minimum 5% edge required
+    min_ev=0.05,            # Minimum 5% expected value
+    min_market_prob=0.05,   # Avoid markets below 5% probability
+    bankroll=1000,          # Starting bankroll
+    kelly_fraction=0.25,    # Use quarter Kelly
+    max_bet_pct=0.05        # Max 5% of bankroll per bet
+)
 ```
 
-**Uncertainty Estimation:**
-
-- Uses probabilistic model (quantile regression) to estimate ±uncertainty
-- Typical uncertainty: ±4-6°F
-
-### Step 2: Calculate Probabilities for Each Threshold
-
-For each Polymarket market (e.g., "Will temp be > 75°F?"):
-
-**Model Probability:**
-
-```python
-z_score = (threshold - prediction) / uncertainty
-model_prob = 1 - norm.cdf(z_score)  # Using normal distribution
-```
-
-**Example:**
-
-- Prediction: 72°F ± 5°F
-- Threshold: 75°F
-- z_score = (75 - 72) / 5 = 0.6
-- model_prob = 1 - 0.7257 = **27.4%**
-
-### Step 3: Compare to Market Odds
-
-**Market Probability:**
-
-- Extracted from Polymarket's current odds
-- Example: Market shows 40% probability
-
-**Calculate Edge:**
-
-```
-Edge = 27.4% - 40% = -12.6%
-```
-
-In this case, the market is **overpricing** this outcome, so we **PASS**.
-
-### Step 4: Calculate Expected Value
-
-```python
-payout_multiplier = 1 / market_odds
-expected_value = (model_prob × payout_multiplier) - 1
-ev_pct = expected_value × 100
-```
-
-**Example (Positive EV):**
-
-- Market odds: 30%
-- Model prob: 45%
-- Payout: 1/0.30 = 3.33x
-- EV = (0.45 × 3.33) - 1 = 0.50 = **+50% EV** ✅
-
-**Example (Negative EV):**
-
-- Market odds: 60%
-- Model prob: 45%
-- Payout: 1/0.60 = 1.67x
-- EV = (0.45 × 1.67) - 1 = -0.25 = **-25% EV** ❌
-
-### Step 5: Calculate Kelly Bet Size
-
-```python
-decimal_odds = 1 / market_odds
-b = decimal_odds - 1
-p = model_prob
-q = 1 - model_prob
-
-kelly = (b × p - q) / b
-kelly_fractional = kelly × 0.25  # Quarter Kelly for safety
-bet_size = kelly_fractional × bankroll
-```
-
-**Example:**
-
-- Bankroll: $1,000
-- Market odds: 30% (decimal odds = 3.33)
-- Model prob: 45%
-- b = 3.33 - 1 = 2.33
-- kelly = (2.33 × 0.45 - 0.55) / 2.33 = 0.214
-- kelly_fractional = 0.214 × 0.25 = 0.0535
-- **Bet size = $53.50**
-
-### Step 6: Make Recommendation
-
-**Betting Criteria:**
-
-```python
-if expected_value > 0.05:  # EV > 5%
-    recommendation = "BET"
-else:
-    recommendation = "PASS"
-```
-
-**Why 5% threshold?**
-
-- Accounts for model uncertainty
-- Provides margin of safety
-- Ensures only strong opportunities are bet
-
-## Complete Example
-
-### Scenario
-
-- **Prediction:** 72°F ± 5°F
-- **Bankroll:** $1,000
-- **Market:** "Will temp be > 70°F?"
-- **Market odds:** 55%
-
-### Calculations
-
-**1. Model Probability:**
-
-```
-z_score = (70 - 72) / 5 = -0.4
-model_prob = 1 - norm.cdf(-0.4) = 65.5%
-```
-
-**2. Edge:**
-
-```
-Edge = 65.5% - 55% = +10.5%
-```
-
-**3. Expected Value:**
-
-```
-Payout = 1 / 0.55 = 1.82x
-EV = (0.655 × 1.82) - 1 = 0.192 = +19.2% EV ✅
-```
-
-**4. Kelly Bet Size:**
-
-```
-b = 1.82 - 1 = 0.82
-kelly = (0.82 × 0.655 - 0.345) / 0.82 = 0.234
-quarter_kelly = 0.234 × 0.25 = 0.0585
-Bet size = $58.50
-```
-
-**5. Recommendation:**
-
-```
-✅ BET YES on "> 70°F" at 55%
-Amount: $58.50
-Edge: +10.5%
-EV: +19.2%
-```
-
-## Risk Management
-
-### 1. Fractional Kelly (25%)
-
-- Reduces volatility
-- Protects against model errors
-- More conservative than full Kelly
-
-### 2. Minimum Edge Requirement (5%)
-
-- Only bet when edge is significant
-- Accounts for model uncertainty
-- Reduces false positives
-
-### 3. Diversification
-
-- Multiple small bets across different thresholds
-- Reduces impact of any single bet
-- Smooths returns
-
-### 4. Bankroll Management
-
-- Never bet more than Kelly suggests
-- Total allocation typically 5-15% of bankroll
-- Preserves capital for future opportunities
-
-## Dashboard Display
-
-The dashboard shows:
-
-1. **Prediction Summary**
-   - Point estimate (e.g., 72°F)
-   - Uncertainty range (e.g., ±5°F)
-   - 80% confidence interval
-
-2. **Market Opportunities**
-   - Each threshold analyzed
-   - Market odds vs Model probability
-   - Edge and EV calculations
-   - Kelly bet size
-
-3. **Recommendations**
-   - Clear BET/PASS decisions
-   - Which side to bet (YES/NO)
-   - Exact bet amount
-   - Expected profit
-
-4. **Technical Analysis**
-   - Detailed probability calculations
-   - Risk/reward metrics
-   - Historical performance tracking
-
-## Key Insights
-
-### When to Bet
-
-✅ **Positive EV** (EV > 5%)
-✅ **Significant edge** (>5% difference)
-✅ **High confidence** (low uncertainty)
-✅ **Liquid market** (high volume)
-
-### When to Pass
-
-❌ **Negative EV** (EV < 0%)
-❌ **Small edge** (<5% difference)
-❌ **High uncertainty** (±10°F or more)
-❌ **Illiquid market** (low volume)
-
-### Common Scenarios
-
-**Scenario 1: Market Underpricing**
-
-- Market: 30% | Model: 45%
-- Result: **BET YES** (market too pessimistic)
-
-**Scenario 2: Market Overpricing**
-
-- Market: 70% | Model: 55%
-- Result: **BET NO** (market too optimistic)
-
-**Scenario 3: Fair Market**
-
-- Market: 50% | Model: 52%
-- Result: **PASS** (edge too small)
-
-## Mathematical Foundation
-
-The strategy is based on:
-
-1. **Law of Large Numbers**: Over many bets, results converge to expected value
-2. **Kelly Criterion**: Optimal bet sizing for long-term growth
-3. **Normal Distribution**: Temperature follows approximately normal distribution
-4. **Bayesian Updating**: Combines multiple information sources (model + forecast)
-
-## Performance Tracking
-
-The pipeline saves results to track:
-
-- Actual vs predicted temperatures
-- Bet outcomes (win/loss)
-- Realized EV vs expected EV
-- Model calibration
-- ROI over time
-
-This allows continuous improvement of the model and strategy.
+## Recommendations
+
+Based on the backtest results:
+
+1. **Focus on "above" bets** - they have 43% win rate vs 0% for "below"
+2. **Avoid high edge opportunities (>30%)** - likely model overconfidence
+3. **Target moderate edges (10-20%)** - best risk/reward
+4. **Be cautious in winter months** - model struggles with cold temperatures
+5. **June-August are best** - model is most accurate for summer temps
+
+## Limitations
+
+1. **Survivorship bias** - only includes days with odds data
+2. **Liquidity assumptions** - assumes we can always get the quoted odds
+3. **Market efficiency** - real markets may be more efficient than historical data suggests
+4. **Sample size** - only 68 bets, need more data for statistical significance
+5. **Cold weather bias** - model fails on "below" bets, needs investigation
+
+## Next Steps
+
+1. Investigate why "below" bets have 0% win rate
+2. Build separate error models for warm vs cold predictions
+3. Add seasonal adjustments to the model
+4. Test with different Kelly fractions and bet size limits
+5. Implement live tracking to validate strategy in real-time

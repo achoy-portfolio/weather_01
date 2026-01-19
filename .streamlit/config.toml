@@ -1,0 +1,12 @@
+[theme]
+# Force light mode only
+base="light"
+primaryColor="#667EEA"
+backgroundColor="#FFFFFF"
+secondaryBackgroundColor="#F0F2F6"
+textColor="#262730"
+font="sans serif"
+
+[server]
+# Disable dark mode toggle
+enableStaticServing = false

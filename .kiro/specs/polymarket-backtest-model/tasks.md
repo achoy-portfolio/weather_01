@@ -45,7 +45,7 @@
   - Create function to simulate betting decisions for all thresholds on a given day
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [-] 6. Implement outcome evaluator
+- [x] 6. Implement outcome evaluator
   - Create function to determine bet outcome (win/loss) based on actual temperature
   - Implement Polymarket rounding rules (whole degree resolution)
   - Handle different threshold types in outcome evaluation
@@ -54,7 +54,7 @@
   - Generate bet-by-bet results with columns: target_date, threshold, bet_placed, bet_size, bet_outcome, profit_loss, cumulative_pl
   - _Requirements: 4.3, 4.5_
 
-- [ ] 7. Build error model calculator
+- [x] 7. Build error model calculator
   - Implement forecast error calculation (forecast - actual)
   - Calculate Mean Absolute Error (MAE) across all forecasts
   - Calculate Root Mean Squared Error (RMSE)

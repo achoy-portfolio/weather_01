@@ -26,10 +26,13 @@ st.set_page_config(
     page_title="Polymarket Temperature Betting",
     page_icon="🌡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "Polymarket Temperature Betting Dashboard"
+    }
 )
 
-# Custom CSS for dark mode compatibility
+# Custom CSS
 st.markdown("""
 <style>
     .big-metric {

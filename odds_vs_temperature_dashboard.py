@@ -46,180 +46,402 @@ st.set_page_config(
     page_title="Temperature vs Odds - KLGA",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "Temperature vs Odds Dashboard"
+    }
 )
 
-# Modern Wealthsimple-inspired styling
+# Modern, cohesive styling with soft colors
 st.markdown("""
 <style>
-    /* Global styles */
-    .main {
-        background-color: #FAFBFC;
+    /* Soft background with subtle warmth */
+    .stApp {
+        background: linear-gradient(to bottom, #FAFBFC 0%, #F5F7FA 100%) !important;
     }
     
-    /* Hide default Streamlit elements */
+    .main {
+        background: transparent !important;
+    }
+    
+    .block-container {
+        background: transparent !important;
+        padding-top: 2rem !important;
+    }
+    
+    /* Clean header */
+    header[data-testid="stHeader"] {
+        background: rgba(255, 255, 255, 0.95) !important;
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+    
+    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* Custom metric cards */
+    /* Elegant sidebar with soft shadow */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFC 100%) !important;
+        border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+        box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
+    }
+    
+    /* Refined typography */
+    body, p, span, div, label {
+        color: #2D3748 !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif !important;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        color: #1A202C !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif !important;
+    }
+    
+    /* Polished input fields */
+    [data-testid="stDateInput"] {
+        background-color: #FFFFFF !important;
+    }
+    
+    [data-testid="stDateInput"] input {
+        background-color: #FFFFFF !important;
+        color: #2D3748 !important;
+        border: 1.5px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        padding: 0.625rem 0.875rem !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    [data-testid="stDateInput"] input:hover {
+        border-color: #CBD5E0 !important;
+    }
+    
+    [data-testid="stDateInput"] input:focus {
+        border-color: #667EEA !important;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+    }
+    
+    [data-testid="stDateInput"] label {
+        color: #4A5568 !important;
+        font-weight: 500 !important;
+        font-size: 0.875rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Beautiful calendar popup */
+    [data-baseweb="calendar"] {
+        background-color: #FFFFFF !important;
+        border-radius: 12px !important;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12) !important;
+        border: 1px solid #E2E8F0 !important;
+        padding: 0.5rem !important;
+    }
+    
+    [data-baseweb="calendar"] header {
+        background-color: #F7FAFC !important;
+        border-radius: 8px !important;
+        padding: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    [data-baseweb="calendar"] select {
+        background-color: #FFFFFF !important;
+        color: #2D3748 !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 6px !important;
+        padding: 0.375rem !important;
+    }
+    
+    [data-baseweb="calendar"] [role="button"] {
+        background-color: transparent !important;
+        color: #4A5568 !important;
+        border-radius: 6px !important;
+        transition: all 0.15s ease !important;
+    }
+    
+    [data-baseweb="calendar"] [role="button"]:hover {
+        background-color: #EDF2F7 !important;
+        color: #2D3748 !important;
+    }
+    
+    [data-baseweb="calendar"] [aria-selected="true"] {
+        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%) !important;
+        color: #FFFFFF !important;
+        font-weight: 600 !important;
+    }
+    
+    [data-baseweb="calendar"] [disabled] {
+        background-color: transparent !important;
+        color: #CBD5E0 !important;
+    }
+    
+    /* Refined form inputs */
+    input[type="date"], input[type="text"], input[type="number"] {
+        background-color: #FFFFFF !important;
+        color: #2D3748 !important;
+        border: 1.5px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    input[type="date"]:focus, input[type="text"]:focus, input[type="number"]:focus {
+        border-color: #667EEA !important;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        outline: none !important;
+    }
+    
+    /* Elegant selectbox */
+    [data-baseweb="select"] {
+        background-color: #FFFFFF !important;
+        border-radius: 8px !important;
+    }
+    
+    [data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        color: #2D3748 !important;
+        border: 1.5px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Refined radio buttons */
+    [data-testid="stRadio"] {
+        background-color: transparent !important;
+    }
+    
+    [data-testid="stRadio"] label {
+        color: #2D3748 !important;
+        padding: 0.5rem 0 !important;
+    }
+    
+    [data-testid="stRadio"] label:hover {
+        color: #1A202C !important;
+    }
+    
+    /* Sidebar headers */
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3 {
+        color: #1A202C !important;
+    }
+    
+    /* Beautiful metric cards with subtle depth */
     .metric-card {
-        background: white;
+        background: linear-gradient(to bottom right, #FFFFFF 0%, #F7FAFC 100%);
         padding: 1.75rem;
-        border-radius: 16px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        border: 1px solid #E8EAED;
+        border-radius: 12px;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
         transition: all 0.3s ease;
-        height: 100%;
     }
     
     .metric-card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.08);
         transform: translateY(-2px);
     }
     
     .metric-value {
-        font-size: 2.75rem;
-        font-weight: 600;
-        color: #191B1F;
-        line-height: 1.2;
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         margin: 0.5rem 0;
+        line-height: 1.2;
     }
     
     .metric-label {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: #5F6368;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #718096 !important;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 0.25rem;
+        letter-spacing: 0.8px;
     }
     
     .metric-caption {
-        font-size: 0.8125rem;
-        color: #80868B;
-        margin-top: 0.5rem;
+        font-size: 0.875rem;
+        color: #A0AEC0 !important;
+        margin-top: 0.625rem;
+        font-weight: 400;
     }
     
-    /* Insight boxes */
+    /* Elegant insight boxes with refined gradients */
     .insight-box {
         background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
-        padding: 1.5rem;
-        border-radius: 16px;
-        color: white;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        padding: 1.75rem;
+        border-radius: 12px;
+        color: white !important;
         margin: 1rem 0;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25);
+        transition: all 0.3s ease;
+    }
+    
+    .insight-box:hover {
+        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.35);
+        transform: translateY(-2px);
+    }
+    
+    .insight-box h4, .insight-box p, .insight-box strong {
+        color: white !important;
     }
     
     .insight-box h4 {
-        margin: 0 0 0.75rem 0;
-        font-size: 0.875rem;
-        font-weight: 600;
+        font-size: 0.8125rem;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        opacity: 0.9;
-    }
-    
-    .insight-box p {
-        margin: 0.5rem 0;
-        font-size: 1rem;
+        margin: 0 0 0.625rem 0;
+        letter-spacing: 1px;
+        opacity: 0.95;
     }
     
     .insight-box strong {
-        font-size: 1.5rem;
-        font-weight: 600;
+        font-size: 1.875rem;
+        font-weight: 700;
         display: block;
-        margin: 0.25rem 0;
+        margin: 0.375rem 0;
+        line-height: 1.2;
     }
     
-    /* Section headers */
+    /* Clean section headers */
     .section-header {
         font-size: 1.5rem;
-        font-weight: 600;
-        color: #191B1F;
-        margin: 2rem 0 1rem 0;
-        padding-bottom: 0.75rem;
-        border-bottom: 2px solid #E8EAED;
+        font-weight: 700;
+        color: #1A202C !important;
+        margin: 2.5rem 0 1.25rem 0;
+        padding-bottom: 0.875rem;
+        border-bottom: 2px solid #E2E8F0;
+        letter-spacing: -0.025em;
     }
     
-    /* Status badges */
+    /* Refined status badges */
     .status-badge {
         display: inline-block;
-        padding: 0.375rem 0.875rem;
-        border-radius: 20px;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
         font-size: 0.8125rem;
-        font-weight: 500;
+        font-weight: 600;
         margin: 0.25rem 0;
+        transition: all 0.2s ease;
     }
     
     .status-success {
-        background: #E6F4EA;
-        color: #137333;
+        background: linear-gradient(135deg, #D4EDDA 0%, #C3E6CB 100%);
+        color: #155724 !important;
+        border: 1px solid #B1DFBB;
     }
     
     .status-warning {
-        background: #FEF7E0;
-        color: #B95000;
+        background: linear-gradient(135deg, #FFF3CD 0%, #FFE8A1 100%);
+        color: #856404 !important;
+        border: 1px solid #FFE69C;
     }
     
     .status-info {
-        background: #E8F0FE;
-        color: #1967D2;
+        background: linear-gradient(135deg, #D1ECF1 0%, #BEE5EB 100%);
+        color: #0C5460 !important;
+        border: 1px solid #B8DAFF;
     }
     
-    /* Sidebar styling */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E8EAED;
-    }
-    
-    [data-testid="stSidebar"] .stMarkdown {
-        padding: 0.5rem 0;
-    }
-    
-    /* Button styling */
+    /* Modern buttons with smooth interactions */
     .stButton > button {
-        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
-        color: white;
+        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%) !important;
+        color: white !important;
         border: none;
-        border-radius: 12px;
+        border-radius: 8px;
         padding: 0.75rem 1.5rem;
-        font-weight: 500;
+        font-weight: 600;
         transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
     }
     
     .stButton > button:hover {
-        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.35);
         transform: translateY(-1px);
     }
     
-    /* Chart container */
+    .stButton > button:active {
+        transform: translateY(0);
+    }
+    
+    /* Elegant chart containers */
     .chart-container {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 16px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-        border: 1px solid #E8EAED;
-        margin: 1rem 0;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        background-color: white;
+        background: linear-gradient(to bottom right, #FFFFFF 0%, #FAFBFC 100%);
+        padding: 2rem;
         border-radius: 12px;
-        border: 1px solid #E8EAED;
-        font-weight: 500;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        margin: 1.5rem 0;
     }
     
-    /* Tab styling */
+    /* Refined expanders */
+    .streamlit-expanderHeader {
+        background: linear-gradient(to right, #F7FAFC 0%, #EDF2F7 100%) !important;
+        border-radius: 8px;
+        border: 1px solid #E2E8F0 !important;
+        font-weight: 600;
+        color: #2D3748 !important;
+        padding: 1rem 1.25rem !important;
+        transition: all 0.2s ease;
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: linear-gradient(to right, #EDF2F7 0%, #E2E8F0 100%) !important;
+        border-color: #CBD5E0 !important;
+    }
+    
+    /* Modern tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 6px;
+        background: linear-gradient(to right, #F7FAFC 0%, #EDF2F7 100%);
+        padding: 0.375rem;
+        border-radius: 10px;
+        border: 1px solid #E2E8F0;
     }
     
     .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 500;
+        border-radius: 6px;
+        padding: 0.625rem 1.25rem;
+        font-weight: 600;
+        color: #718096 !important;
+        transition: all 0.2s ease;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #4A5568 !important;
+        background-color: rgba(255, 255, 255, 0.5) !important;
+    }
+    
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(to bottom right, #FFFFFF 0%, #F7FAFC 100%) !important;
+        color: #1A202C !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    
+    /* Polished form inputs */
+    input, select, textarea {
+        color: #2D3748 !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Smooth scrollbar */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #F7FAFC;
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, #CBD5E0 0%, #A0AEC0 100%);
+        border-radius: 10px;
+        border: 2px solid #F7FAFC;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(to bottom, #A0AEC0 0%, #718096 100%);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -657,22 +879,22 @@ def fetch_polymarket_odds(target_date):
         st.error(f"Error fetching Polymarket data: {e}")
         return None
 
-# Title with modern styling
+# Title with elegant styling
 st.markdown("""
-<div style='margin-bottom: 2rem;'>
-    <h1 style='font-size: 2.5rem; font-weight: 600; color: #191B1F; margin: 0; line-height: 1.2;'>
+<div style='margin-bottom: 2.5rem; padding: 2rem 0 1.5rem 0; border-bottom: 1px solid rgba(0, 0, 0, 0.06);'>
+    <h1 style='font-size: 2.75rem; font-weight: 700; background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0; line-height: 1.2; letter-spacing: -0.025em;'>
         Temperature vs Market Odds
     </h1>
-    <p style='font-size: 1.125rem; color: #5F6368; margin-top: 0.5rem; font-weight: 400;'>
+    <p style='font-size: 1.125rem; color: #718096; margin-top: 0.75rem; font-weight: 400; line-height: 1.6;'>
         Real-time analysis of how temperature readings influence prediction markets
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar with modern styling
+# Sidebar with elegant styling
 st.sidebar.markdown("""
-<div style='padding: 1rem 0; border-bottom: 1px solid #E8EAED; margin-bottom: 1.5rem;'>
-    <h2 style='font-size: 1.25rem; font-weight: 600; color: #191B1F; margin: 0;'>
+<div style='padding: 1.25rem 0; border-bottom: 1px solid rgba(0, 0, 0, 0.08); margin-bottom: 1.75rem;'>
+    <h2 style='font-size: 1.375rem; font-weight: 700; color: #1A202C; margin: 0; letter-spacing: -0.015em;'>
         ⚙️ Controls
     </h2>
 </div>
@@ -751,8 +973,8 @@ else:
 # Now add the odds display controls to sidebar
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
-<div style='padding: 1rem 0 0.5rem 0;'>
-    <h3 style='font-size: 1rem; font-weight: 600; color: #191B1F; margin: 0;'>
+<div style='padding: 1.25rem 0 0.75rem 0;'>
+    <h3 style='font-size: 1.0625rem; font-weight: 700; color: #1A202C; margin: 0; letter-spacing: -0.01em;'>
         📊 Odds Display
     </h3>
 </div>
@@ -795,8 +1017,8 @@ show_temp_bands = st.sidebar.checkbox(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
-<div style='padding: 1rem 0 0.5rem 0;'>
-    <h3 style='font-size: 1rem; font-weight: 600; color: #191B1F; margin: 0;'>
+<div style='padding: 1.25rem 0 0.75rem 0;'>
+    <h3 style='font-size: 1.0625rem; font-weight: 700; color: #1A202C; margin: 0; letter-spacing: -0.01em;'>
         🔮 Forecast Analysis
     </h3>
 </div>
@@ -965,7 +1187,7 @@ if has_odds:
     temp_df_before = temp_df[temp_df['timestamp'] < target_date_start]
     temp_df_after = temp_df[temp_df['timestamp'] > target_date_end]
     
-    # Plot temperature before target date (gray)
+    # Plot temperature before target date (soft gray)
     if not temp_df_before.empty:
         fig.add_trace(
             go.Scatter(
@@ -973,14 +1195,14 @@ if has_odds:
                 y=temp_df_before['temp_f'],
                 mode='lines',
                 name='Temp (Before)',
-                line=dict(color='#CBD5E0', width=2, dash='dot'),
+                line=dict(color='#CBD5E0', width=2.5, dash='dot'),
                 hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
             row=1, col=1
         )
     
-    # Plot temperature on target date (vibrant gradient color)
+    # Plot temperature on target date (warm coral)
     if not temp_df_target.empty:
         fig.add_trace(
             go.Scatter(
@@ -988,14 +1210,14 @@ if has_odds:
                 y=temp_df_target['temp_f'],
                 mode='lines',
                 name=f'Temp ({selected_date.strftime("%b %d")})',
-                line=dict(color='#F5576C', width=3),
+                line=dict(color='#FC8181', width=3.5),
                 hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
             row=1, col=1
         )
     
-    # Plot temperature after target date (gray)
+    # Plot temperature after target date (soft gray)
     if not temp_df_after.empty:
         fig.add_trace(
             go.Scatter(
@@ -1003,7 +1225,7 @@ if has_odds:
                 y=temp_df_after['temp_f'],
                 mode='lines',
                 name='Temp (After)',
-                line=dict(color='#CBD5E0', width=2, dash='dot'),
+                line=dict(color='#CBD5E0', width=2.5, dash='dot'),
                 hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
@@ -1077,8 +1299,8 @@ if has_odds:
                     row=1, col=1
                 )
     
-    # Odds lines - show only selected buckets with modern color palette
-    colors = ['#667EEA', '#764BA2', '#F093FB', '#4FACFE', '#00F2FE', '#43E97B', '#FA709A']
+    # Odds lines - show only selected buckets with harmonious color palette
+    colors = ['#667EEA', '#48BB78', '#ED8936', '#38B2AC', '#9F7AEA', '#F56565', '#4299E1']
     
     for i, bucket in enumerate(display_buckets):
         bucket_data = odds_df[odds_df['threshold'] == bucket]
@@ -1113,14 +1335,43 @@ if has_odds:
             y=1.02,
             xanchor="right",
             x=1,
-            bgcolor="rgba(255,255,255,0.9)",
-            bordercolor="#E8EAED",
-            borderwidth=1
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="rgba(0, 0, 0, 0.08)",
+            borderwidth=1,
+            font=dict(color="#2D3748", size=12)
         ),
         margin=dict(t=80, b=50, l=50, r=50),
         plot_bgcolor='#FAFBFC',
         paper_bgcolor='white',
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif", color="#191B1F")
+        font=dict(family="-apple-system, BlinkMacSystemFont, Inter, sans-serif", color="#2D3748", size=13),
+        xaxis=dict(
+            title=dict(font=dict(color="#4A5568", size=13)),
+            tickfont=dict(color="#4A5568", size=11),
+            gridcolor='rgba(0, 0, 0, 0.05)',
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
+        ),
+        yaxis=dict(
+            title=dict(font=dict(color="#4A5568", size=13)),
+            tickfont=dict(color="#4A5568", size=11),
+            gridcolor='rgba(0, 0, 0, 0.05)',
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
+        ),
+        xaxis2=dict(
+            title=dict(font=dict(color="#4A5568", size=13)),
+            tickfont=dict(color="#4A5568", size=11),
+            gridcolor='rgba(0, 0, 0, 0.05)',
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
+        ),
+        yaxis2=dict(
+            title=dict(font=dict(color="#4A5568", size=13)),
+            tickfont=dict(color="#4A5568", size=11),
+            gridcolor='rgba(0, 0, 0, 0.05)',
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
+        )
     )
     
     st.plotly_chart(fig, use_container_width=True, key=f"main_chart_{selected_date}")
@@ -1142,8 +1393,8 @@ if has_odds:
     
     fig_bar = go.Figure()
     
-    # Use gradient colors
-    colors = ['#667EEA' if p == latest_by_bucket['probability'].max() else '#A0AEC0' 
+    # Use harmonious gradient colors
+    colors = ['#667EEA' if p == latest_by_bucket['probability'].max() else '#CBD5E0' 
               for p in latest_by_bucket['probability']]
     
     fig_bar.add_trace(go.Bar(
@@ -1155,42 +1406,46 @@ if has_odds:
         ),
         text=[f"{p:.1%}" for p in latest_by_bucket['probability']],
         textposition='outside',
-        textfont=dict(size=13, color='#191B1F', family="Inter, sans-serif"),
+        textfont=dict(size=13, color='#2D3748', family="-apple-system, BlinkMacSystemFont, Inter, sans-serif"),
         hovertemplate='<b>%{x}</b><br>Probability: %{y:.1%}<extra></extra>'
     ))
     
     fig_bar.update_layout(
         title=dict(
             text=f"Latest Market Odds — {selected_date.strftime('%B %d, %Y')}",
-            font=dict(size=18, color='#191B1F', family="Inter, sans-serif"),
+            font=dict(size=18, color='#1A202C', family="-apple-system, BlinkMacSystemFont, Inter, sans-serif", weight=700),
             x=0,
             xanchor='left'
         ),
         xaxis=dict(
             title=dict(
                 text="Temperature Range",
-                font=dict(size=13, color='#5F6368')
+                font=dict(size=13, color='#718096')
             ),
-            tickfont=dict(size=12, color='#191B1F'),
-            showgrid=False
+            tickfont=dict(size=12, color='#4A5568'),
+            showgrid=False,
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
         ),
         yaxis=dict(
             title=dict(
                 text="Probability",
-                font=dict(size=13, color='#5F6368')
+                font=dict(size=13, color='#718096')
             ),
             tickformat='.0%',
             range=[0, latest_by_bucket['probability'].max() * 1.15],
             showgrid=True,
-            gridcolor='#E8EAED',
-            tickfont=dict(size=12, color='#191B1F')
+            gridcolor='rgba(0, 0, 0, 0.05)',
+            tickfont=dict(size=12, color='#4A5568'),
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
         ),
         height=400,
         showlegend=False,
         plot_bgcolor='#FAFBFC',
         paper_bgcolor='white',
         margin=dict(t=60, b=50, l=50, r=50),
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif")
+        font=dict(family="-apple-system, BlinkMacSystemFont, Inter, sans-serif")
     )
     
     st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_chart_{selected_date}")
@@ -1272,36 +1527,36 @@ else:
     temp_df_before = temp_df[temp_df['timestamp'] < target_date_start]
     temp_df_after = temp_df[temp_df['timestamp'] > target_date_end]
     
-    # Plot temperature before target date (gray)
+    # Plot temperature before target date (soft gray)
     if not temp_df_before.empty:
         fig.add_trace(go.Scatter(
             x=temp_df_before['timestamp'],
             y=temp_df_before['temp_f'],
             mode='lines',
             name='Temp (Before)',
-            line=dict(color='#CBD5E0', width=2, dash='dot'),
+            line=dict(color='#CBD5E0', width=2.5, dash='dot'),
             hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>'
         ))
     
-    # Plot temperature on target date (vibrant color)
+    # Plot temperature on target date (warm coral)
     if not temp_df_target.empty:
         fig.add_trace(go.Scatter(
             x=temp_df_target['timestamp'],
             y=temp_df_target['temp_f'],
             mode='lines',
             name=f'Temp ({selected_date.strftime("%b %d")})',
-            line=dict(color='#F5576C', width=3),
+            line=dict(color='#FC8181', width=3.5),
             hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>'
         ))
     
-    # Plot temperature after target date (gray)
+    # Plot temperature after target date (soft gray)
     if not temp_df_after.empty:
         fig.add_trace(go.Scatter(
             x=temp_df_after['timestamp'],
             y=temp_df_after['temp_f'],
             mode='lines',
             name='Temp (After)',
-            line=dict(color='#CBD5E0', width=2, dash='dot'),
+            line=dict(color='#CBD5E0', width=2.5, dash='dot'),
             hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>'
         ))
     
@@ -1320,31 +1575,35 @@ else:
     fig.update_layout(
         title=dict(
             text="Temperature Data — Full Period",
-            font=dict(size=18, color='#191B1F', family="Inter, sans-serif"),
+            font=dict(size=18, color='#1A202C', family="-apple-system, BlinkMacSystemFont, Inter, sans-serif", weight=700),
             x=0,
             xanchor='left'
         ),
         yaxis=dict(
             title=dict(
                 text="Temperature (°F)",
-                font=dict(size=13, color='#5F6368')
+                font=dict(size=13, color='#718096')
             ),
             showgrid=True,
-            gridcolor='#E8EAED',
-            tickfont=dict(size=12, color='#191B1F')
+            gridcolor='rgba(0, 0, 0, 0.05)',
+            tickfont=dict(size=12, color='#4A5568'),
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
         ),
         xaxis=dict(
             title=dict(
                 text="Time (ET)",
-                font=dict(size=13, color='#5F6368')
+                font=dict(size=13, color='#718096')
             ),
-            tickfont=dict(size=12, color='#191B1F')
+            tickfont=dict(size=12, color='#4A5568'),
+            showline=True,
+            linecolor='rgba(0, 0, 0, 0.1)'
         ),
         height=500,
         hovermode='x unified',
         plot_bgcolor='#FAFBFC',
         paper_bgcolor='white',
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif")
+        font=dict(family="-apple-system, BlinkMacSystemFont, Inter, sans-serif", color="#2D3748")
     )
     
     st.plotly_chart(fig, use_container_width=True, key=f"temp_only_chart_{selected_date}")
@@ -1540,14 +1799,14 @@ with st.expander("📋 View Raw Data", expanded=False):
             else:
                 st.info("No overlapping forecast data for the target date")
 
-# Footer with modern styling
+# Footer with elegant styling
 st.markdown("<div style='margin: 3rem 0 1rem 0;'></div>", unsafe_allow_html=True)
 st.markdown(f"""
-<div style='text-align: center; padding: 2rem 0; border-top: 1px solid #E8EAED;'>
-    <p style='color: #80868B; font-size: 0.875rem; margin: 0.5rem 0;'>
+<div style='text-align: center; padding: 2.5rem 0; border-top: 1px solid rgba(0, 0, 0, 0.06); background: linear-gradient(to bottom, transparent 0%, #FAFBFC 100%);'>
+    <p style='color: #718096; font-size: 0.9375rem; margin: 0.5rem 0; font-weight: 500;'>
         Last updated: {datetime.now(NY_TZ).strftime('%B %d, %Y at %I:%M:%S %p')} ET
     </p>
-    <p style='color: #A0AEC0; font-size: 0.8125rem; margin: 0.5rem 0;'>
+    <p style='color: #A0AEC0; font-size: 0.875rem; margin: 0.5rem 0;'>
         Temperature: NWS KLGA • Odds: Polymarket • All times in Eastern Time
     </p>
 </div>

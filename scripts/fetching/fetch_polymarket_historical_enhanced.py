@@ -235,7 +235,7 @@ def fetch_all_odds_history(token_id, target_date, volume=0):
         'market': token_id,
         'startTs': int(start_ts),
         'endTs': int(end_ts),
-        'fidelity': 1  # 1-minute resolution for all available data points
+        'fidelity': 5  # 5-minute resolution for all available data points
     }
     
     headers = {
