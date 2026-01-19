@@ -11,7 +11,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import sys
 import os
 import requests
@@ -28,6 +28,20 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo
 
 NY_TZ = ZoneInfo("America/New_York")
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+# Get Visual Crossing API key
+VISUAL_CROSSING_API_KEY = os.getenv("VISUAL_CROSSING_API_KEY")
+
+# Debug: Show if key is loaded (first/last 4 chars only)
+if VISUAL_CROSSING_API_KEY and VISUAL_CROSSING_API_KEY != "your_visual_crossing_key_here":
+    masked_key = f"{VISUAL_CROSSING_API_KEY[:4]}...{VISUAL_CROSSING_API_KEY[-4:]}"
+    print(f"Visual Crossing API key loaded: {masked_key}")
+else:
+    print("Visual Crossing API key not found in .env")
 
 # Page config
 st.set_page_config(
@@ -144,12 +158,11 @@ def fetch_openmeteo_forecast(target_date):
             # Parse timestamp - Open-Meteo returns ISO format strings
             timestamp = datetime.fromisoformat(time_str).replace(tzinfo=NY_TZ)
             
-            # Only include target date
-            if timestamp.date() == target_date:
-                records.append({
-                    'timestamp': timestamp,
-                    'temp_f': round(temp, 1)
-                })
+            records.append({
+                'timestamp': timestamp,
+                'temp_f': round(temp, 1),
+                'date': timestamp.date()
+            })
         
         if not records:
             # Debug: show what dates we got
@@ -167,6 +180,168 @@ def fetch_openmeteo_forecast(target_date):
         import traceback
         st.code(traceback.format_exc())
         return None
+        return None
+
+# Fetch NWS forecast
+@st.cache_data(ttl=300)
+def fetch_nws_forecast():
+    """Fetch NWS forecast for KLGA"""
+    try:
+        sys.path.insert(0, 'scripts/fetching')
+        from fetch_nws_forecast import get_nws_forecast
+        
+        df = get_nws_forecast()
+        
+        if df is not None and not df.empty:
+            # Ensure timezone aware
+            if 'start_time' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['start_time'])
+                if df['timestamp'].dt.tz is None:
+                    df['timestamp'] = df['timestamp'].dt.tz_localize('UTC').dt.tz_convert(NY_TZ)
+                else:
+                    df['timestamp'] = df['timestamp'].dt.tz_convert(NY_TZ)
+                
+                # Rename temperature column
+                if 'temperature' in df.columns:
+                    df = df.rename(columns={'temperature': 'temp_f'})
+                
+                df['date'] = df['timestamp'].dt.date
+                return df[['timestamp', 'temp_f', 'date']].copy()
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+# Fetch Visual Crossing forecast
+@st.cache_data(ttl=3600)
+def fetch_visual_crossing_forecast(target_date):
+    """Fetch Visual Crossing forecast - includes current day if available"""
+    # Use the global API key
+    if not VISUAL_CROSSING_API_KEY:
+        st.sidebar.warning("⚠️ VISUAL_CROSSING_API_KEY not found in .env file")
+        return None
+    
+    if VISUAL_CROSSING_API_KEY == "your_visual_crossing_key_here":
+        st.sidebar.warning("⚠️ VISUAL_CROSSING_API_KEY is set to placeholder value")
+        return None
+    
+    location = "LaGuardia Airport,NY,US"
+    
+    # Get data starting from today (not target_date) to include current day
+    today = date.today()
+    start_date = today.isoformat()
+    # Get enough days to cover target_date + buffer
+    days_ahead = (target_date - today).days
+    end_date = (today + timedelta(days=max(3, days_ahead + 1))).isoformat()
+    
+    url = f"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{location}/{start_date}/{end_date}"
+    
+    params = {
+        'key': VISUAL_CROSSING_API_KEY,
+        'unitGroup': 'us',
+        'include': 'hours',
+        'contentType': 'json',
+        'elements': 'datetime,temp'
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        
+        if response.status_code == 401:
+            st.sidebar.error("❌ Visual Crossing API key is invalid")
+            return None
+        elif response.status_code == 429:
+            st.sidebar.warning("⚠️ Visual Crossing API rate limit exceeded")
+            return None
+        elif response.status_code != 200:
+            st.sidebar.warning(f"⚠️ Visual Crossing API error: {response.status_code}")
+            return None
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'days' not in data:
+            return None
+        
+        records = []
+        for day in data['days']:
+            day_date = datetime.fromisoformat(day['datetime']).date()
+            
+            if 'hours' in day:
+                for hour in day['hours']:
+                    hour_time = datetime.strptime(hour['datetime'], '%H:%M:%S').time()
+                    timestamp = datetime.combine(day_date, hour_time).replace(tzinfo=NY_TZ)
+                    
+                    temp = hour.get('temp')
+                    if temp is not None:
+                        records.append({
+                            'timestamp': timestamp,
+                            'temp_f': temp,
+                            'date': timestamp.date()
+                        })
+        
+        if not records:
+            return None
+        
+        df = pd.DataFrame(records)
+        df = df.sort_values('timestamp')
+        
+        st.sidebar.success(f"✓ Visual Crossing: {len(df)} hours from {df['date'].min()} to {df['date'].max()}")
+        
+        return df
+        
+    except Exception as e:
+        st.sidebar.error(f"❌ Visual Crossing error: {str(e)}")
+        return None
+
+# Fetch actual temperature readings from NWS
+@st.cache_data(ttl=60)
+def fetch_actual_temperatures(target_date):
+    """Fetch actual temperature observations from NWS (up to 7 days past)"""
+    try:
+        from src.data.weather_scraper import WeatherScraper
+        
+        scraper = WeatherScraper(station_id="KLGA")
+        
+        # Get data from 3 days before to now
+        now = datetime.now(timezone.utc)
+        start_dt = now - timedelta(days=3)
+        
+        # Fetch in 24-hour chunks
+        all_dfs = []
+        current_start = start_dt
+        
+        while current_start < now:
+            current_end = min(current_start + timedelta(hours=24), now)
+            
+            try:
+                df_chunk = scraper.fetch_raw_observations(current_start, current_end)
+                if not df_chunk.empty:
+                    all_dfs.append(df_chunk)
+            except Exception as e:
+                pass
+            
+            current_start = current_end
+        
+        if not all_dfs:
+            return None
+        
+        # Combine all chunks
+        df = pd.concat(all_dfs, ignore_index=False)
+        df = df.sort_index()
+        df = df[~df.index.duplicated(keep='first')]
+        
+        df.index = df.index.tz_convert(NY_TZ)
+        df = df.reset_index()
+        df = df.rename(columns={'index': 'timestamp'})
+        
+        df['date'] = df['timestamp'].dt.date
+        
+        return df[['timestamp', 'temp_f', 'date']].copy()
+        
+    except Exception as e:
+        st.sidebar.warning(f"⚠️ Could not fetch NWS actual temps: {str(e)}")
         return None
 
 # Fetch Polymarket odds
@@ -306,15 +481,19 @@ def calculate_model_probability(forecast_temp, threshold_value, threshold_type, 
     return 0.0
 
 # Generate betting recommendations
-def generate_recommendations(forecast_df, odds_df, error_model, bankroll, min_edge=0.05, min_ev=0.05, 
+def generate_recommendations(forecast_df, odds_df, error_model, target_date, bankroll, min_edge=0.05, min_ev=0.05, 
                             min_volume=100, max_bet_vs_volume=0.10, kelly_fraction=0.25, max_bet_pct=0.05):
     """Generate betting recommendations based on forecast and odds"""
     
     if forecast_df is None or odds_df is None or error_model is None:
         return None
     
-    # Get forecasted max temperature
-    forecasted_max = forecast_df['temp_f'].max()
+    # Get forecasted max temperature for ONLY the betting day (target_date)
+    betting_day_forecast = forecast_df[forecast_df['date'] == target_date]
+    if betting_day_forecast.empty:
+        return None
+    
+    forecasted_max = betting_day_forecast['temp_f'].max()
     
     recommendations = []
     
@@ -475,6 +654,9 @@ if error_model is None:
 with st.spinner("Loading forecast and market data..."):
     forecast_df = fetch_openmeteo_forecast(selected_date)
     odds_df = fetch_polymarket_odds(selected_date)
+    nws_forecast_df = fetch_nws_forecast()
+    vc_forecast_df = fetch_visual_crossing_forecast(selected_date)
+    actual_temps_df = fetch_actual_temperatures(selected_date)
 
 # Check if data is available
 if forecast_df is None:
@@ -500,7 +682,7 @@ if odds_df is None:
 
 # Generate recommendations
 recommendations = generate_recommendations(
-    forecast_df, odds_df, error_model, bankroll,
+    forecast_df, odds_df, error_model, selected_date, bankroll,
     min_edge=min_edge, min_ev=0.05, min_volume=100,
     max_bet_vs_volume=0.10, kelly_fraction=kelly_fraction, max_bet_pct=max_bet_pct
 )
@@ -509,14 +691,27 @@ recommendations = generate_recommendations(
 st.markdown("### 📊 Model Information")
 col1, col2, col3, col4 = st.columns(4)
 
+# Get forecasted max for ONLY the betting day
+betting_day_forecast = forecast_df[forecast_df['date'] == selected_date] if forecast_df is not None else None
+forecasted_max_betting_day = betting_day_forecast['temp_f'].max() if betting_day_forecast is not None and not betting_day_forecast.empty else None
+
 with col1:
-    st.markdown(f"""
-    <div class="metric-card">
-        <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Forecast Max</div>
-        <div style="font-size: 2rem; font-weight: 700; color: #667EEA; margin: 0.5rem 0;">{recommendations['forecasted_max'].iloc[0]:.1f}°F</div>
-        <div style="font-size: 0.875rem; color: #A0AEC0;">Open-Meteo</div>
-    </div>
-    """, unsafe_allow_html=True)
+    if forecasted_max_betting_day is not None:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Forecast Max ({selected_date.strftime('%b %d')})</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #667EEA; margin: 0.5rem 0;">{forecasted_max_betting_day:.1f}°F</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">Open-Meteo</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Forecast Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #CBD5E0; margin: 0.5rem 0;">—</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">Not available</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 with col2:
     st.markdown(f"""
@@ -544,6 +739,258 @@ with col4:
         <div style="font-size: 0.875rem; color: #A0AEC0;">Max bet: ${bankroll * max_bet_pct:.0f}</div>
     </div>
     """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+# Forecast Comparison Section
+st.markdown("### 🌡️ Temperature Forecasts Comparison")
+
+# Calculate forecasted max for ONLY the target betting day from each source
+openmeteo_max = None
+nws_max = None
+vc_max = None
+
+# Get forecasted max for the betting day only
+if forecast_df is not None:
+    # Filter to only the target betting day
+    target_day_data = forecast_df[forecast_df['date'] == selected_date]
+    if not target_day_data.empty:
+        openmeteo_max = target_day_data['temp_f'].max()
+
+if nws_forecast_df is not None:
+    # Filter to only the target betting day
+    target_day_data = nws_forecast_df[nws_forecast_df['date'] == selected_date]
+    if not target_day_data.empty:
+        nws_max = target_day_data['temp_f'].max()
+
+if vc_forecast_df is not None:
+    # Filter to only the target betting day
+    target_day_data = vc_forecast_df[vc_forecast_df['date'] == selected_date]
+    if not target_day_data.empty:
+        vc_max = target_day_data['temp_f'].max()
+
+# Display forecast max cards
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if openmeteo_max is not None:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Open-Meteo Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #FC8181; margin: 0.5rem 0;">{openmeteo_max:.1f}°F</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">For {selected_date.strftime('%b %d')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Open-Meteo Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #CBD5E0; margin: 0.5rem 0;">—</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">Not available</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+with col2:
+    if nws_max is not None:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">NWS Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #4FACFE; margin: 0.5rem 0;">{nws_max:.1f}°F</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">For {selected_date.strftime('%b %d')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">NWS Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #CBD5E0; margin: 0.5rem 0;">—</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">Not available</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+with col3:
+    if vc_max is not None:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Visual Crossing Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #764BA2; margin: 0.5rem 0;">{vc_max:.1f}°F</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">For {selected_date.strftime('%b %d')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Visual Crossing Max</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #CBD5E0; margin: 0.5rem 0;">—</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">Not available</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Create forecast comparison chart
+if forecast_df is not None or nws_forecast_df is not None or vc_forecast_df is not None or actual_temps_df is not None:
+    fig_forecast = go.Figure()
+    
+    # Define 72-hour window from current time
+    now = datetime.now(NY_TZ)
+    window_start = now - timedelta(hours=24)  # 24 hours ago
+    window_end = now + timedelta(hours=48)    # 48 hours ahead
+    
+    # Define target date boundaries at midnight ET
+    target_date_start = datetime.combine(selected_date, datetime.min.time()).replace(tzinfo=NY_TZ)
+    target_date_end = datetime.combine(selected_date + timedelta(days=1), datetime.min.time()).replace(tzinfo=NY_TZ)
+    
+    # Add actual temperature readings (if available)
+    if actual_temps_df is not None:
+        # Filter to 72-hour window
+        actual_window = actual_temps_df[
+            (actual_temps_df['timestamp'] >= window_start) & 
+            (actual_temps_df['timestamp'] <= now)
+        ]
+        
+        if not actual_window.empty:
+            # Split by date relative to target
+            actual_before = actual_window[actual_window['date'] < selected_date]
+            actual_target = actual_window[actual_window['date'] == selected_date]
+            
+            # Plot actual temps before target date (gray)
+            if not actual_before.empty:
+                fig_forecast.add_trace(go.Scatter(
+                    x=actual_before['timestamp'],
+                    y=actual_before['temp_f'],
+                    mode='lines',
+                    name='Actual (Past)',
+                    line=dict(color='#A0AEC0', width=2.5),
+                    hovertemplate='Actual: %{y:.1f}°F<br>%{x}<extra></extra>'
+                ))
+            
+            # Plot actual temps on target date (bold red)
+            if not actual_target.empty:
+                fig_forecast.add_trace(go.Scatter(
+                    x=actual_target['timestamp'],
+                    y=actual_target['temp_f'],
+                    mode='lines',
+                    name=f'Actual ({selected_date.strftime("%b %d")})',
+                    line=dict(color='#E53E3E', width=3.5),
+                    hovertemplate='Actual: %{y:.1f}°F<br>%{x}<extra></extra>'
+                ))
+    
+    # Add Open-Meteo forecast (filter to window)
+    if forecast_df is not None:
+        forecast_window = forecast_df[
+            (forecast_df['timestamp'] >= now) & 
+            (forecast_df['timestamp'] <= window_end)
+        ]
+        if not forecast_window.empty:
+            fig_forecast.add_trace(go.Scatter(
+                x=forecast_window['timestamp'],
+                y=forecast_window['temp_f'],
+                mode='lines+markers',
+                name='Open-Meteo Forecast',
+                line=dict(color='#FC8181', width=3),
+                marker=dict(size=5),
+                hovertemplate='Open-Meteo: %{y:.1f}°F<br>%{x}<extra></extra>'
+            ))
+    
+    # Add NWS forecast (filter to window)
+    if nws_forecast_df is not None:
+        forecast_window = nws_forecast_df[
+            (nws_forecast_df['timestamp'] >= now) & 
+            (nws_forecast_df['timestamp'] <= window_end)
+        ]
+        if not forecast_window.empty:
+            fig_forecast.add_trace(go.Scatter(
+                x=forecast_window['timestamp'],
+                y=forecast_window['temp_f'],
+                mode='lines+markers',
+                name='NWS Forecast',
+                line=dict(color='#4FACFE', width=2.5, dash='dot'),
+                marker=dict(size=4),
+                hovertemplate='NWS: %{y:.1f}°F<br>%{x}<extra></extra>'
+            ))
+    
+    # Add Visual Crossing forecast (filter to window)
+    if vc_forecast_df is not None:
+        forecast_window = vc_forecast_df[
+            (vc_forecast_df['timestamp'] >= now) & 
+            (vc_forecast_df['timestamp'] <= window_end)
+        ]
+        if not forecast_window.empty:
+            fig_forecast.add_trace(go.Scatter(
+                x=forecast_window['timestamp'],
+                y=forecast_window['temp_f'],
+                mode='lines+markers',
+                name='Visual Crossing Forecast',
+                line=dict(color='#764BA2', width=2.5, dash='dash'),
+                marker=dict(size=4),
+                hovertemplate='Visual Crossing: %{y:.1f}°F<br>%{x}<extra></extra>'
+            ))
+    
+    # Add vertical line for current time using shapes
+    fig_forecast.add_shape(
+        type="line",
+        x0=now, x1=now,
+        y0=0, y1=1,
+        yref="paper",
+        line=dict(color="rgba(0,0,0,0.5)", width=2, dash="solid")
+    )
+    fig_forecast.add_annotation(
+        x=now, y=1, yref="paper",
+        text="Now", showarrow=False,
+        yshift=10, font=dict(size=10)
+    )
+    
+    # Add vertical lines to mark target date boundaries (if in window)
+    if target_date_start >= window_start and target_date_start <= window_end:
+        fig_forecast.add_shape(
+            type="line",
+            x0=target_date_start, x1=target_date_start,
+            y0=0, y1=1,
+            yref="paper",
+            line=dict(color="rgba(102, 126, 234, 0.5)", width=2, dash="dash")
+        )
+        fig_forecast.add_annotation(
+            x=target_date_start, y=1, yref="paper",
+            text=f"{selected_date.strftime('%b %d')} starts", showarrow=False,
+            yshift=10, font=dict(size=10)
+        )
+    
+    if target_date_end >= window_start and target_date_end <= window_end:
+        fig_forecast.add_shape(
+            type="line",
+            x0=target_date_end, x1=target_date_end,
+            y0=0, y1=1,
+            yref="paper",
+            line=dict(color="rgba(102, 126, 234, 0.5)", width=2, dash="dash")
+        )
+        fig_forecast.add_annotation(
+            x=target_date_end, y=1, yref="paper",
+            text=f"{selected_date.strftime('%b %d')} ends", showarrow=False,
+            yshift=10, font=dict(size=10)
+        )
+    
+    fig_forecast.update_layout(
+        title=f"72-Hour Temperature Window - {selected_date.strftime('%B %d, %Y')}",
+        xaxis_title="Time (ET)",
+        yaxis_title="Temperature (°F)",
+        height=500,
+        hovermode='x unified',
+        template="plotly_white",
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        xaxis=dict(
+            range=[window_start, window_end]
+        )
+    )
+    
+    st.plotly_chart(fig_forecast, use_container_width=True)
+else:
+    st.info("No forecast data available for comparison chart")
 
 st.markdown("---")
 
