@@ -22,9 +22,24 @@ def analyze_error_distribution():
     )
     forecasts['valid_time'] = pd.to_datetime(forecasts['valid_time'])
     
-    actuals = pd.read_csv('data/raw/actual_temperatures.csv')
+    # Load actuals from Weather Underground (hourly data)
+    try:
+        actuals = pd.read_csv('data/raw/wunderground_hourly_temps.csv')
+        print("Using Weather Underground hourly data (official Polymarket source)")
+    except FileNotFoundError:
+        print("Weather Underground data not found, falling back to Open-Meteo data")
+        actuals = pd.read_csv('data/raw/actual_temperatures.csv')
+    
     actuals['timestamp'] = pd.to_datetime(actuals['timestamp'])
     actuals.rename(columns={'temperature_f': 'actual_temp'}, inplace=True)
+    
+    # Load daily max from Weather Underground for next-day max calculation
+    try:
+        daily_max = pd.read_csv('data/raw/wunderground_daily_max_temps.csv')
+        daily_max['date'] = pd.to_datetime(daily_max['date'])
+        use_daily_max = True
+    except FileNotFoundError:
+        use_daily_max = False
     
     # Get 9 PM forecasts for next day
     results = []
@@ -49,16 +64,22 @@ def analyze_error_distribution():
         
         forecasted_max = next_day_forecasts['temperature'].max()
         
-        next_day_actuals = actuals[
-            actuals['timestamp'].dt.date == next_day.date()
-        ]
+        # Get actual max from Weather Underground daily max file if available
+        if use_daily_max:
+            day_max = daily_max[daily_max['date'].dt.date == next_day.date()]
+            if len(day_max) == 0:
+                continue
+            actual_max = day_max['max_temp_f'].iloc[0]
+        else:
+            # Fallback to calculating from hourly data
+            next_day_actuals = actuals[
+                actuals['timestamp'].dt.date == next_day.date()
+            ]
+            if len(next_day_actuals) == 0:
+                continue
+            actual_max = next_day_actuals['actual_temp'].max()
         
-        if len(next_day_actuals) == 0:
-            continue
-        
-        actual_max = next_day_actuals['actual_temp'].max()
         error = forecasted_max - actual_max
-        
         results.append(error)
     
     errors = np.array(results)

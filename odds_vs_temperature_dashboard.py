@@ -41,7 +41,7 @@ except:
     VISUAL_CROSSING_API_KEY = os.getenv("VISUAL_CROSSING_API_KEY")
     VISUAL_CROSSING_API_KEY = os.getenv("VISUAL_CROSSING_API_KEY")
 
-# Page config
+# Page config - FORCE LIGHT THEME
 st.set_page_config(
     page_title="Temperature vs Odds - KLGA",
     page_icon="📊",
@@ -52,7 +52,11 @@ st.set_page_config(
     }
 )
 
-# Modern, cohesive styling with soft colors
+# Force light theme via session state
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'
+
+# Modern, cohesive styling - Let Streamlit handle all form components
 st.markdown("""
 <style>
     /* Soft background with subtle warmth */
@@ -67,6 +71,12 @@ st.markdown("""
     .block-container {
         background: transparent !important;
         padding-top: 2rem !important;
+    }
+    
+    /* Force all backgrounds to be light */
+    body, html, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
+        background-color: #FAFBFC !important;
+        color: #2D3748 !important;
     }
     
     /* Clean header */
@@ -87,6 +97,10 @@ st.markdown("""
         box-shadow: 2px 0 12px rgba(0, 0, 0, 0.03);
     }
     
+    [data-testid="stSidebar"] > div:first-child {
+        background: linear-gradient(to bottom, #FFFFFF 0%, #FAFBFC 100%) !important;
+    }
+    
     /* Refined typography */
     body, p, span, div, label {
         color: #2D3748 !important;
@@ -96,78 +110,6 @@ st.markdown("""
     h1, h2, h3, h4, h5, h6 {
         color: #1A202C !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif !important;
-    }
-    
-    /* Polished input fields */
-    [data-testid="stDateInput"] {
-        background-color: #FFFFFF !important;
-    }
-    
-    [data-testid="stDateInput"] input {
-        background-color: #FFFFFF !important;
-        color: #2D3748 !important;
-        border: 1.5px solid #E2E8F0 !important;
-        border-radius: 8px !important;
-        padding: 0.625rem 0.875rem !important;
-        transition: all 0.2s ease !important;
-    }
-    
-    [data-testid="stDateInput"] input:hover {
-        border-color: #CBD5E0 !important;
-    }
-    
-    [data-testid="stDateInput"] input:focus {
-        border-color: #667EEA !important;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
-    }
-    
-    [data-testid="stDateInput"] label {
-        color: #4A5568 !important;
-        font-weight: 500 !important;
-        font-size: 0.875rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    /* Refined form inputs */
-    input[type="date"], input[type="text"], input[type="number"] {
-        background-color: #FFFFFF !important;
-        color: #2D3748 !important;
-        border: 1.5px solid #E2E8F0 !important;
-        border-radius: 8px !important;
-        transition: all 0.2s ease !important;
-    }
-    
-    input[type="date"]:focus, input[type="text"]:focus, input[type="number"]:focus {
-        border-color: #667EEA !important;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
-        outline: none !important;
-    }
-    
-    /* Elegant selectbox */
-    [data-baseweb="select"] {
-        background-color: #FFFFFF !important;
-        border-radius: 8px !important;
-    }
-    
-    [data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        color: #2D3748 !important;
-        border: 1.5px solid #E2E8F0 !important;
-        border-radius: 8px !important;
-    }
-    
-    /* Refined radio buttons */
-    [data-testid="stRadio"] {
-        background-color: transparent !important;
-    }
-    
-    [data-testid="stRadio"] label {
-        color: #2D3748 !important;
-        padding: 0.5rem 0 !important;
-    }
-    
-    [data-testid="stRadio"] label:hover {
-        color: #1A202C !important;
     }
     
     /* Sidebar headers */
@@ -326,56 +268,6 @@ st.markdown("""
         margin: 1.5rem 0;
     }
     
-    /* Refined expanders */
-    .streamlit-expanderHeader {
-        background: linear-gradient(to right, #F7FAFC 0%, #EDF2F7 100%) !important;
-        border-radius: 8px;
-        border: 1px solid #E2E8F0 !important;
-        font-weight: 600;
-        color: #2D3748 !important;
-        padding: 1rem 1.25rem !important;
-        transition: all 0.2s ease;
-    }
-    
-    .streamlit-expanderHeader:hover {
-        background: linear-gradient(to right, #EDF2F7 0%, #E2E8F0 100%) !important;
-        border-color: #CBD5E0 !important;
-    }
-    
-    /* Modern tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        background: linear-gradient(to right, #F7FAFC 0%, #EDF2F7 100%);
-        padding: 0.375rem;
-        border-radius: 10px;
-        border: 1px solid #E2E8F0;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 6px;
-        padding: 0.625rem 1.25rem;
-        font-weight: 600;
-        color: #718096 !important;
-        transition: all 0.2s ease;
-    }
-    
-    .stTabs [data-baseweb="tab"]:hover {
-        color: #4A5568 !important;
-        background-color: rgba(255, 255, 255, 0.5) !important;
-    }
-    
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background: linear-gradient(to bottom right, #FFFFFF 0%, #F7FAFC 100%) !important;
-        color: #1A202C !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    }
-    
-    /* Polished form inputs */
-    input, select, textarea {
-        color: #2D3748 !important;
-        font-weight: 500 !important;
-    }
-    
     /* Smooth scrollbar */
     ::-webkit-scrollbar {
         width: 10px;
@@ -399,7 +291,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Cache data
 @st.cache_data(ttl=300)  # Cache for 5 minutes since NWS forecast updates frequently
 def fetch_nws_forecast_data():
     """

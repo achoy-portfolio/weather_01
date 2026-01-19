@@ -158,14 +158,26 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
     )
     forecasts['valid_time'] = pd.to_datetime(forecasts['valid_time'])
     
-    actuals = pd.read_csv('data/raw/actual_temperatures.csv')
-    actuals['timestamp'] = pd.to_datetime(actuals['timestamp'])
+    # Load actual daily max temperatures from Weather Underground (official Polymarket source)
+    try:
+        daily_max = pd.read_csv('data/raw/wunderground_daily_max_temps.csv')
+        daily_max['date'] = pd.to_datetime(daily_max['date'])
+        print("Using Weather Underground daily max data (official Polymarket source)")
+        use_wunderground = True
+    except FileNotFoundError:
+        print("Weather Underground data not found, falling back to Open-Meteo hourly data")
+        actuals = pd.read_csv('data/raw/actual_temperatures.csv')
+        actuals['timestamp'] = pd.to_datetime(actuals['timestamp'])
+        use_wunderground = False
     
     odds_df = pd.read_csv('data/raw/polymarket_odds_history.csv')
     odds_df['event_date'] = pd.to_datetime(odds_df['event_date'])
     
     print(f"  Forecasts: {len(forecasts):,} records")
-    print(f"  Actuals: {len(actuals):,} records")
+    if use_wunderground:
+        print(f"  Daily Max Temps: {len(daily_max):,} days")
+    else:
+        print(f"  Actuals: {len(actuals):,} records")
     print(f"  Odds: {len(odds_df):,} records")
     
     # Get unique betting days (days with odds data)
@@ -215,15 +227,20 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
         
         forecasted_max = betting_day_forecasts['temperature'].max()
         
-        # Get actual max for betting day
-        betting_day_actuals = actuals[
-            actuals['timestamp'].dt.date == betting_day_dt.date()
-        ]
-        
-        if len(betting_day_actuals) == 0:
-            continue
-        
-        actual_max = betting_day_actuals['temperature_f'].max()
+        # Get actual max for betting day from Weather Underground
+        if use_wunderground:
+            day_max = daily_max[daily_max['date'].dt.date == betting_day_dt.date()]
+            if len(day_max) == 0:
+                continue
+            actual_max = day_max['max_temp_f'].iloc[0]
+        else:
+            # Fallback to calculating from hourly data
+            betting_day_actuals = actuals[
+                actuals['timestamp'].dt.date == betting_day_dt.date()
+            ]
+            if len(betting_day_actuals) == 0:
+                continue
+            actual_max = betting_day_actuals['temperature_f'].max()
         
         # Get odds at 9 PM the day before (when we'd actually be betting)
         # We want odds closest to 9 PM on forecast_day
