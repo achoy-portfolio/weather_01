@@ -9,6 +9,7 @@ joblib>=1.3.0
 # Web scraping & API
 requests>=2.31.0
 beautifulsoup4>=4.12.0
+aiohttp>=3.9.0
 
 # Visualization
 matplotlib>=3.7.0
