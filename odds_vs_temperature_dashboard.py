@@ -49,18 +49,177 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Modern Wealthsimple-inspired styling
 st.markdown("""
 <style>
-    .main-metric {
-        font-size: 2.5rem;
-        font-weight: 700;
+    /* Global styles */
+    .main {
+        background-color: #FAFBFC;
     }
+    
+    /* Hide default Streamlit elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Custom metric cards */
+    .metric-card {
+        background: white;
+        padding: 1.75rem;
+        border-radius: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        border: 1px solid #E8EAED;
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .metric-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transform: translateY(-2px);
+    }
+    
+    .metric-value {
+        font-size: 2.75rem;
+        font-weight: 600;
+        color: #191B1F;
+        line-height: 1.2;
+        margin: 0.5rem 0;
+    }
+    
+    .metric-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #5F6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.25rem;
+    }
+    
+    .metric-caption {
+        font-size: 0.8125rem;
+        color: #80868B;
+        margin-top: 0.5rem;
+    }
+    
+    /* Insight boxes */
     .insight-box {
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #1a73e8;
-        background-color: rgba(26, 115, 232, 0.1);
+        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+        padding: 1.5rem;
+        border-radius: 16px;
+        color: white;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
         margin: 1rem 0;
+    }
+    
+    .insight-box h4 {
+        margin: 0 0 0.75rem 0;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        opacity: 0.9;
+    }
+    
+    .insight-box p {
+        margin: 0.5rem 0;
+        font-size: 1rem;
+    }
+    
+    .insight-box strong {
+        font-size: 1.5rem;
+        font-weight: 600;
+        display: block;
+        margin: 0.25rem 0;
+    }
+    
+    /* Section headers */
+    .section-header {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #191B1F;
+        margin: 2rem 0 1rem 0;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #E8EAED;
+    }
+    
+    /* Status badges */
+    .status-badge {
+        display: inline-block;
+        padding: 0.375rem 0.875rem;
+        border-radius: 20px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        margin: 0.25rem 0;
+    }
+    
+    .status-success {
+        background: #E6F4EA;
+        color: #137333;
+    }
+    
+    .status-warning {
+        background: #FEF7E0;
+        color: #B95000;
+    }
+    
+    .status-info {
+        background: #E8F0FE;
+        color: #1967D2;
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #FFFFFF;
+        border-right: 1px solid #E8EAED;
+    }
+    
+    [data-testid="stSidebar"] .stMarkdown {
+        padding: 0.5rem 0;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+    
+    .stButton > button:hover {
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+        transform: translateY(-1px);
+    }
+    
+    /* Chart container */
+    .chart-container {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        border: 1px solid #E8EAED;
+        margin: 1rem 0;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background-color: white;
+        border-radius: 12px;
+        border: 1px solid #E8EAED;
+        font-weight: 500;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -498,12 +657,26 @@ def fetch_polymarket_odds(target_date):
         st.error(f"Error fetching Polymarket data: {e}")
         return None
 
-# Title
-st.title("📊 Temperature vs Market Odds")
-st.markdown("**Understanding how odds react to temperature readings**")
+# Title with modern styling
+st.markdown("""
+<div style='margin-bottom: 2rem;'>
+    <h1 style='font-size: 2.5rem; font-weight: 600; color: #191B1F; margin: 0; line-height: 1.2;'>
+        Temperature vs Market Odds
+    </h1>
+    <p style='font-size: 1.125rem; color: #5F6368; margin-top: 0.5rem; font-weight: 400;'>
+        Real-time analysis of how temperature readings influence prediction markets
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-# Sidebar
-st.sidebar.title("⚙️ Controls")
+# Sidebar with modern styling
+st.sidebar.markdown("""
+<div style='padding: 1rem 0; border-bottom: 1px solid #E8EAED; margin-bottom: 1.5rem;'>
+    <h2 style='font-size: 1.25rem; font-weight: 600; color: #191B1F; margin: 0;'>
+        ⚙️ Controls
+    </h2>
+</div>
+""", unsafe_allow_html=True)
 
 # Date selector - allow any date
 today = date.today()
@@ -577,7 +750,13 @@ else:
 
 # Now add the odds display controls to sidebar
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 Odds Display")
+st.sidebar.markdown("""
+<div style='padding: 1rem 0 0.5rem 0;'>
+    <h3 style='font-size: 1rem; font-weight: 600; color: #191B1F; margin: 0;'>
+        📊 Odds Display
+    </h3>
+</div>
+""", unsafe_allow_html=True)
 
 odds_filter = st.sidebar.radio(
     "Show odds for:",
@@ -615,7 +794,13 @@ show_temp_bands = st.sidebar.checkbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔮 Forecast Analysis")
+st.sidebar.markdown("""
+<div style='padding: 1rem 0 0.5rem 0;'>
+    <h3 style='font-size: 1rem; font-weight: 600; color: #191B1F; margin: 0;'>
+        🔮 Forecast Analysis
+    </h3>
+</div>
+""", unsafe_allow_html=True)
 
 show_forecast = st.sidebar.checkbox(
     "Show historical forecast",
@@ -623,15 +808,23 @@ show_forecast = st.sidebar.checkbox(
     help="See what the forecast was at a specific time"
 )
 
-# Show API key status
+# Show API key status with modern badges
 if VISUAL_CROSSING_API_KEY and VISUAL_CROSSING_API_KEY != "your_visual_crossing_key_here":
-    st.sidebar.success("✓ Visual Crossing API key configured")
+    st.sidebar.markdown("""
+    <div class="status-badge status-success" style="display: block; margin: 0.5rem 0;">
+        ✓ Visual Crossing API configured
+    </div>
+    """, unsafe_allow_html=True)
     # Debug: show first/last chars
     if len(VISUAL_CROSSING_API_KEY) > 8:
         masked_key = f"{VISUAL_CROSSING_API_KEY[:4]}...{VISUAL_CROSSING_API_KEY[-4:]}"
         st.sidebar.caption(f"Key: {masked_key}")
 else:
-    st.sidebar.error("❌ Visual Crossing API key not set")
+    st.sidebar.markdown("""
+    <div class="status-badge status-warning" style="display: block; margin: 0.5rem 0;">
+        ❌ Visual Crossing API key not set
+    </div>
+    """, unsafe_allow_html=True)
     st.sidebar.caption("Add VISUAL_CROSSING_API_KEY to .env file")
     # Debug: show what we got
     st.sidebar.caption(f"Current value: {VISUAL_CROSSING_API_KEY if VISUAL_CROSSING_API_KEY else 'None'}")
@@ -701,23 +894,31 @@ elif show_forecast and not has_odds:
 st.sidebar.markdown("---")
 refresh_btn = st.sidebar.button("🔄 Refresh Data", width='stretch')
 
-# Current stats
+# Current stats with modern card design
 current_temp = temp_df['temp_f'].iloc[-1]
 current_time = temp_df['timestamp'].iloc[-1]
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown('<div class="main-metric">{:.1f}°F</div>'.format(current_temp), unsafe_allow_html=True)
-    st.markdown(f"**Current Temperature**")
-    st.caption(f"As of {current_time.strftime('%I:%M %p ET')}")
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">Current Temperature</div>
+        <div class="metric-value">{current_temp:.1f}°F</div>
+        <div class="metric-caption">As of {current_time.strftime('%I:%M %p ET')}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with col2:
     high_temp = temp_df['temp_f'].max()
     high_time = temp_df.loc[temp_df['temp_f'].idxmax(), 'timestamp']
-    st.markdown('<div class="main-metric">{:.1f}°F</div>'.format(high_temp), unsafe_allow_html=True)
-    st.markdown(f"**High (Period)**")
-    st.caption(f"At {high_time.strftime('%I:%M %p ET')}")
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">Period High</div>
+        <div class="metric-value">{high_temp:.1f}°F</div>
+        <div class="metric-caption">At {high_time.strftime('%I:%M %p ET')}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with col3:
     if has_odds and len(buckets) > 0:
@@ -725,17 +926,26 @@ with col3:
         latest_by_bucket = odds_df.groupby('threshold').last().reset_index()
         max_prob_bucket = latest_by_bucket.loc[latest_by_bucket['probability'].idxmax()]
         
-        st.markdown('<div class="main-metric">{:.1%}</div>'.format(max_prob_bucket['probability']), unsafe_allow_html=True)
-        st.markdown(f"**Most Likely: {max_prob_bucket['threshold_display']}**")
-        st.caption(f"As of {max_prob_bucket['timestamp'].strftime('%I:%M %p ET')}")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Most Likely Range</div>
+            <div class="metric-value">{max_prob_bucket['probability']:.0%}</div>
+            <div class="metric-caption">{max_prob_bucket['threshold_display']} • {max_prob_bucket['timestamp'].strftime('%I:%M %p ET')}</div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.markdown('<div class="main-metric">-</div>', unsafe_allow_html=True)
-        st.markdown("**Market Odds**")
-        st.caption("No data")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Market Odds</div>
+            <div class="metric-value">—</div>
+            <div class="metric-caption">No data available</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-st.markdown("---")
+st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
 
 # Main chart - Temperature and Odds
+st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
 if has_odds:
     # Create dual-axis chart
     fig = make_subplots(
@@ -763,14 +973,14 @@ if has_odds:
                 y=temp_df_before['temp_f'],
                 mode='lines',
                 name='Temp (Before)',
-                line=dict(color='#95a5a6', width=2, dash='dot'),
+                line=dict(color='#CBD5E0', width=2, dash='dot'),
                 hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
             row=1, col=1
         )
     
-    # Plot temperature on target date (bright red/orange)
+    # Plot temperature on target date (vibrant gradient color)
     if not temp_df_target.empty:
         fig.add_trace(
             go.Scatter(
@@ -778,7 +988,7 @@ if has_odds:
                 y=temp_df_target['temp_f'],
                 mode='lines',
                 name=f'Temp ({selected_date.strftime("%b %d")})',
-                line=dict(color='#e74c3c', width=3),
+                line=dict(color='#F5576C', width=3),
                 hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
@@ -793,7 +1003,7 @@ if has_odds:
                 y=temp_df_after['temp_f'],
                 mode='lines',
                 name='Temp (After)',
-                line=dict(color='#95a5a6', width=2, dash='dot'),
+                line=dict(color='#CBD5E0', width=2, dash='dot'),
                 hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
@@ -822,7 +1032,7 @@ if has_odds:
                 y=forecast_df['temp_f'],
                 mode='lines',
                 name=f'Visual Crossing Forecast',
-                line=dict(color='#9b59b6', width=2, dash='dash'),
+                line=dict(color='#764BA2', width=2, dash='dash'),
                 hovertemplate='VC Forecast: %{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
@@ -833,7 +1043,7 @@ if has_odds:
         fig.add_vline(
             x=selected_forecast_time.timestamp() * 1000,
             line_dash="dot",
-            line_color="rgba(155, 89, 182, 0.5)",
+            line_color="rgba(118, 75, 162, 0.5)",
             annotation_text="Forecast issued",
             annotation_position="top",
             row=1, col=1
@@ -847,7 +1057,7 @@ if has_odds:
                 y=nws_forecast_df['temp_f'],
                 mode='lines',
                 name='NWS Forecast',
-                line=dict(color='#e67e22', width=2, dash='dot'),
+                line=dict(color='#4FACFE', width=2, dash='dot'),
                 hovertemplate='NWS Forecast: %{y:.1f}°F<br>%{x}<extra></extra>',
                 showlegend=True
             ),
@@ -867,8 +1077,8 @@ if has_odds:
                     row=1, col=1
                 )
     
-    # Odds lines - show only selected buckets
-    colors = ['#d93025', '#ea8600', '#1a73e8', '#0f9d58', '#9b59b6', '#e67e22', '#34a853']
+    # Odds lines - show only selected buckets with modern color palette
+    colors = ['#667EEA', '#764BA2', '#F093FB', '#4FACFE', '#00F2FE', '#43E97B', '#FA709A']
     
     for i, bucket in enumerate(display_buckets):
         bucket_data = odds_df[odds_df['threshold'] == bucket]
@@ -902,61 +1112,103 @@ if has_odds:
             yanchor="bottom",
             y=1.02,
             xanchor="right",
-            x=1
+            x=1,
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#E8EAED",
+            borderwidth=1
         ),
-        margin=dict(t=80, b=50, l=50, r=50)  # Add top margin for titles
+        margin=dict(t=80, b=50, l=50, r=50),
+        plot_bgcolor='#FAFBFC',
+        paper_bgcolor='white',
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif", color="#191B1F")
     )
     
-    st.plotly_chart(fig, width='stretch', key=f"main_chart_{selected_date}")
+    st.plotly_chart(fig, use_container_width=True, key=f"main_chart_{selected_date}")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # Analysis insights
-    st.markdown("---")
-    st.subheader("🔍 Market Analysis")
+    st.markdown("<div style='margin: 2.5rem 0 1.5rem 0;'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>Market Analysis</div>", unsafe_allow_html=True)
     
     # Show current odds for all buckets
-    st.markdown("### 📊 Current Odds by Temperature Range")
+    st.markdown("<div style='margin: 1.5rem 0 1rem 0; font-size: 1.125rem; font-weight: 500; color: #191B1F;'>Current Odds by Temperature Range</div>", unsafe_allow_html=True)
     
     latest_by_bucket = odds_df.groupby('threshold').last().reset_index()
     latest_by_bucket = latest_by_bucket.sort_values('probability', ascending=False)
     
-    # Create a bar chart of current odds
+    # Create a bar chart of current odds with modern styling
+    st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
+    
     fig_bar = go.Figure()
+    
+    # Use gradient colors
+    colors = ['#667EEA' if p == latest_by_bucket['probability'].max() else '#A0AEC0' 
+              for p in latest_by_bucket['probability']]
     
     fig_bar.add_trace(go.Bar(
         x=latest_by_bucket['threshold_display'],
         y=latest_by_bucket['probability'],
-        marker_color=['#0f9d58' if p == latest_by_bucket['probability'].max() else '#1a73e8' 
-                      for p in latest_by_bucket['probability']],
+        marker=dict(
+            color=colors,
+            line=dict(width=0)
+        ),
         text=[f"{p:.1%}" for p in latest_by_bucket['probability']],
         textposition='outside',
-        hovertemplate='%{x}: %{y:.1%}<extra></extra>'
+        textfont=dict(size=13, color='#191B1F', family="Inter, sans-serif"),
+        hovertemplate='<b>%{x}</b><br>Probability: %{y:.1%}<extra></extra>'
     ))
     
     fig_bar.update_layout(
-        title=f"Latest Market Odds - {selected_date}",
-        xaxis_title="Temperature Range",
-        yaxis_title="Probability",
-        yaxis_tickformat='.0%',
-        yaxis_range=[0, latest_by_bucket['probability'].max() * 1.15],  # Add 15% headroom for labels
+        title=dict(
+            text=f"Latest Market Odds — {selected_date.strftime('%B %d, %Y')}",
+            font=dict(size=18, color='#191B1F', family="Inter, sans-serif"),
+            x=0,
+            xanchor='left'
+        ),
+        xaxis=dict(
+            title=dict(
+                text="Temperature Range",
+                font=dict(size=13, color='#5F6368')
+            ),
+            tickfont=dict(size=12, color='#191B1F'),
+            showgrid=False
+        ),
+        yaxis=dict(
+            title=dict(
+                text="Probability",
+                font=dict(size=13, color='#5F6368')
+            ),
+            tickformat='.0%',
+            range=[0, latest_by_bucket['probability'].max() * 1.15],
+            showgrid=True,
+            gridcolor='#E8EAED',
+            tickfont=dict(size=12, color='#191B1F')
+        ),
         height=400,
         showlegend=False,
-        template="plotly_white",
-        margin=dict(t=60, b=50, l=50, r=50)  # Add margins
+        plot_bgcolor='#FAFBFC',
+        paper_bgcolor='white',
+        margin=dict(t=60, b=50, l=50, r=50),
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif")
     )
     
-    st.plotly_chart(fig_bar, width='stretch', key=f"bar_chart_{selected_date}")
+    st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_chart_{selected_date}")
     
-    # Show odds changes
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Show odds changes with modern insight cards
+    st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
     
     with col1:
         max_bucket = latest_by_bucket.iloc[0]
         st.markdown(f"""
-        <div class="insight-box">
+        <div class="insight-box" style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);">
             <h4>🎯 Most Likely</h4>
-            <p><strong>{max_bucket['threshold_display']}</strong></p>
-            <p>Probability: {max_bucket['probability']:.1%}</p>
-            <p>Updated: {max_bucket['timestamp'].strftime('%I:%M %p ET')}</p>
+            <strong>{max_bucket['threshold_display']}</strong>
+            <p style="font-size: 1.125rem; margin: 0.5rem 0;">Probability: {max_bucket['probability']:.1%}</p>
+            <p style="font-size: 0.875rem; opacity: 0.9;">Updated: {max_bucket['timestamp'].strftime('%I:%M %p ET')}</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -976,12 +1228,13 @@ if has_odds:
                     biggest_change_time = f"{first['timestamp'].strftime('%I:%M %p')} - {last['timestamp'].strftime('%I:%M %p')}"
         
         if 'biggest_change' in locals():
+            gradient = "linear-gradient(135deg, #11998E 0%, #38EF7D 100%)" if biggest_change > 0 else "linear-gradient(135deg, #FC466B 0%, #3F5EFB 100%)"
             st.markdown(f"""
-            <div class="insight-box">
+            <div class="insight-box" style="background: {gradient};">
                 <h4>📈 Biggest Change</h4>
-                <p><strong>{biggest_change_bucket}</strong></p>
-                <p>Change: {biggest_change:+.1%}</p>
-                <p>{biggest_change_time} ET</p>
+                <strong>{biggest_change_bucket}</strong>
+                <p style="font-size: 1.125rem; margin: 0.5rem 0;">Change: {biggest_change:+.1%}</p>
+                <p style="font-size: 0.875rem; opacity: 0.9;">{biggest_change_time} ET</p>
             </div>
             """, unsafe_allow_html=True)
     
@@ -995,17 +1248,20 @@ if has_odds:
             low, high = map(int, max_bucket_str.split('-'))
             in_range = low <= current_temp <= high
         
+        gradient = "linear-gradient(135deg, #F093FB 0%, #F5576C 100%)"
         st.markdown(f"""
-        <div class="insight-box">
+        <div class="insight-box" style="background: {gradient};">
             <h4>🌡️ Current vs Market</h4>
-            <p><strong>Current: {current_temp:.1f}°F</strong></p>
-            <p>Market expects: {max_bucket['threshold_display']}</p>
-            <p>{'✅ In range' if in_range else '⚠️ Outside range'}</p>
+            <strong>{current_temp:.1f}°F</strong>
+            <p style="font-size: 1.125rem; margin: 0.5rem 0;">Market expects: {max_bucket['threshold_display']}</p>
+            <p style="font-size: 0.875rem; opacity: 0.9;">{'✅ In range' if in_range else '⚠️ Outside range'}</p>
         </div>
         """, unsafe_allow_html=True)
 
 else:
-    # Temperature only chart
+    # Temperature only chart with modern styling
+    st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
+    
     fig = go.Figure()
     
     # Split temperature data by date
@@ -1023,18 +1279,18 @@ else:
             y=temp_df_before['temp_f'],
             mode='lines',
             name='Temp (Before)',
-            line=dict(color='#95a5a6', width=2, dash='dot'),
+            line=dict(color='#CBD5E0', width=2, dash='dot'),
             hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>'
         ))
     
-    # Plot temperature on target date (bright red)
+    # Plot temperature on target date (vibrant color)
     if not temp_df_target.empty:
         fig.add_trace(go.Scatter(
             x=temp_df_target['timestamp'],
             y=temp_df_target['temp_f'],
             mode='lines',
             name=f'Temp ({selected_date.strftime("%b %d")})',
-            line=dict(color='#e74c3c', width=3),
+            line=dict(color='#F5576C', width=3),
             hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>'
         ))
     
@@ -1045,7 +1301,7 @@ else:
             y=temp_df_after['temp_f'],
             mode='lines',
             name='Temp (After)',
-            line=dict(color='#95a5a6', width=2, dash='dot'),
+            line=dict(color='#CBD5E0', width=2, dash='dot'),
             hovertemplate='%{y:.1f}°F<br>%{x}<extra></extra>'
         ))
     
@@ -1062,43 +1318,85 @@ else:
     )
     
     fig.update_layout(
-        title=f"Temperature - Data Period",
-        yaxis_title="Temperature (°F)",
-        xaxis_title="Time (ET)",
+        title=dict(
+            text="Temperature Data — Full Period",
+            font=dict(size=18, color='#191B1F', family="Inter, sans-serif"),
+            x=0,
+            xanchor='left'
+        ),
+        yaxis=dict(
+            title=dict(
+                text="Temperature (°F)",
+                font=dict(size=13, color='#5F6368')
+            ),
+            showgrid=True,
+            gridcolor='#E8EAED',
+            tickfont=dict(size=12, color='#191B1F')
+        ),
+        xaxis=dict(
+            title=dict(
+                text="Time (ET)",
+                font=dict(size=13, color='#5F6368')
+            ),
+            tickfont=dict(size=12, color='#191B1F')
+        ),
         height=500,
         hovermode='x unified',
-        template="plotly_white"
+        plot_bgcolor='#FAFBFC',
+        paper_bgcolor='white',
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif")
     )
     
-    st.plotly_chart(fig, width='stretch', key=f"temp_only_chart_{selected_date}")
+    st.plotly_chart(fig, use_container_width=True, key=f"temp_only_chart_{selected_date}")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Timezone verification
-st.markdown("---")
-st.subheader("🕐 Timezone Verification")
+# Timezone verification with modern cards
+st.markdown("<div style='margin: 2.5rem 0 1.5rem 0;'></div>", unsafe_allow_html=True)
+st.markdown("<div class='section-header'>Timezone Verification</div>", unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("**NWS Data Timezone**")
     sample_time = temp_df.iloc[0]['timestamp']
-    st.code(f"{sample_time}")
-    st.success("✓ Timezone: America/New_York (ET)")
-    st.caption("The -05:00 offset confirms Eastern Standard Time")
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">NWS Data Timezone</div>
+        <div style="background: #F8F9FA; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-family: 'Monaco', monospace; font-size: 0.875rem; color: #191B1F;">
+            {sample_time}
+        </div>
+        <div class="status-badge status-success">✓ America/New_York (ET)</div>
+        <div class="metric-caption" style="margin-top: 0.75rem;">The -05:00 offset confirms Eastern Standard Time</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 with col2:
     if has_odds:
-        st.markdown("**Polymarket Data Timezone**")
         sample_odds_time = odds_df.iloc[0]['timestamp']
-        st.code(f"{sample_odds_time}")
-        st.success("✓ Timezone: America/New_York (ET)")
-        st.caption("Both datasets use the same timezone for accurate comparison")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Polymarket Data Timezone</div>
+            <div style="background: #F8F9FA; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-family: 'Monaco', monospace; font-size: 0.875rem; color: #191B1F;">
+                {sample_odds_time}
+            </div>
+            <div class="status-badge status-success">✓ America/New_York (ET)</div>
+            <div class="metric-caption" style="margin-top: 0.75rem;">Both datasets use the same timezone for accurate comparison</div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.markdown("**Polymarket Data Timezone**")
-        st.info("No odds data loaded yet")
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Polymarket Data Timezone</div>
+            <div style="background: #F8F9FA; padding: 1rem; border-radius: 8px; margin: 1rem 0; font-family: 'Monaco', monospace; font-size: 0.875rem; color: #80868B;">
+                No data loaded
+            </div>
+            <div class="status-badge status-info">ℹ️ Awaiting data</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-# Data tables
-st.markdown("---")
-with st.expander("📋 View Raw Data"):
+# Data tables with modern styling
+st.markdown("<div style='margin: 2.5rem 0 1.5rem 0;'></div>", unsafe_allow_html=True)
+with st.expander("📋 View Raw Data", expanded=False):
     # Determine number of tabs based on available data
     tabs_list = ["Temperature Data", "Odds Data"]
     if forecast_df is not None and not forecast_df.empty:
@@ -1242,11 +1540,15 @@ with st.expander("📋 View Raw Data"):
             else:
                 st.info("No overlapping forecast data for the target date")
 
-# Footer
-st.markdown("---")
+# Footer with modern styling
+st.markdown("<div style='margin: 3rem 0 1rem 0;'></div>", unsafe_allow_html=True)
 st.markdown(f"""
-<div style='text-align: center; color: #666; font-size: 0.9rem;'>
-    <p>Last updated: {datetime.now(NY_TZ).strftime('%Y-%m-%d %I:%M:%S %p')} ET</p>
-    <p>Temperature: NWS KLGA | Odds: Polymarket | All times in Eastern Time</p>
+<div style='text-align: center; padding: 2rem 0; border-top: 1px solid #E8EAED;'>
+    <p style='color: #80868B; font-size: 0.875rem; margin: 0.5rem 0;'>
+        Last updated: {datetime.now(NY_TZ).strftime('%B %d, %Y at %I:%M:%S %p')} ET
+    </p>
+    <p style='color: #A0AEC0; font-size: 0.8125rem; margin: 0.5rem 0;'>
+        Temperature: NWS KLGA • Odds: Polymarket • All times in Eastern Time
+    </p>
 </div>
 """, unsafe_allow_html=True)
