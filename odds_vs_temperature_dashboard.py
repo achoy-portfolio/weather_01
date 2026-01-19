@@ -128,53 +128,6 @@ st.markdown("""
         margin-bottom: 0.5rem !important;
     }
     
-    /* Beautiful calendar popup */
-    [data-baseweb="calendar"] {
-        background-color: #FFFFFF !important;
-        border-radius: 12px !important;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12) !important;
-        border: 1px solid #E2E8F0 !important;
-        padding: 0.5rem !important;
-    }
-    
-    [data-baseweb="calendar"] header {
-        background-color: #F7FAFC !important;
-        border-radius: 8px !important;
-        padding: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-    }
-    
-    [data-baseweb="calendar"] select {
-        background-color: #FFFFFF !important;
-        color: #2D3748 !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 6px !important;
-        padding: 0.375rem !important;
-    }
-    
-    [data-baseweb="calendar"] [role="button"] {
-        background-color: transparent !important;
-        color: #4A5568 !important;
-        border-radius: 6px !important;
-        transition: all 0.15s ease !important;
-    }
-    
-    [data-baseweb="calendar"] [role="button"]:hover {
-        background-color: #EDF2F7 !important;
-        color: #2D3748 !important;
-    }
-    
-    [data-baseweb="calendar"] [aria-selected="true"] {
-        background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%) !important;
-        color: #FFFFFF !important;
-        font-weight: 600 !important;
-    }
-    
-    [data-baseweb="calendar"] [disabled] {
-        background-color: transparent !important;
-        color: #CBD5E0 !important;
-    }
-    
     /* Refined form inputs */
     input[type="date"], input[type="text"], input[type="number"] {
         background-color: #FFFFFF !important;
