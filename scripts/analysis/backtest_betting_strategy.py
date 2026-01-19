@@ -15,27 +15,41 @@ import json
 from datetime import timedelta
 
 
-def load_error_model():
-    """Load the saved error distribution model"""
+def load_error_model(lead_time='1d'):
+    """
+    Load the saved error distribution model for specified lead time.
+    
+    Args:
+        lead_time: '0d' or '1d' for same-day or 1-day ahead forecasts
+    """
     with open('data/processed/error_distribution_analysis.json', 'r') as f:
-        return json.load(f)
+        model = json.load(f)
+    
+    # Use specified lead time model
+    if 'by_lead_time' in model and lead_time in model['by_lead_time']:
+        return model['by_lead_time'][lead_time]
+    else:
+        # Fallback to overall model
+        return model.get('overall', model)
 
 
 def calculate_model_probability(forecast_temp, threshold, threshold_type, error_model):
     """
     Calculate model probability that actual temp meets threshold condition.
     
+    Uses the error distribution from specified lead time.
+    
     Args:
         forecast_temp: Forecasted temperature
         threshold: Threshold value (e.g., 44 for "44-45" or "≥44")
         threshold_type: 'above', 'below', or 'range'
-        error_model: Loaded error model
+        error_model: Loaded error model for specified lead time
     
     Returns:
         Probability (0 to 1)
     """
-    mean_error = error_model['basic_statistics']['mean']
-    std_error = error_model['basic_statistics']['std']
+    mean_error = error_model['mean']  # Bias
+    std_error = error_model['std']
     
     # Adjust forecast for bias
     adjusted_forecast = forecast_temp - mean_error
@@ -124,11 +138,12 @@ def check_bet_outcome(actual_temp, threshold, threshold_type):
     return False
 
 
-def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=0.25, max_bet_pct=0.05, min_market_prob=0.05):
+def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=0.25, max_bet_pct=0.05, min_market_prob=0.05):
     """
-    Backtest the betting strategy on historical data.
+    Backtest the betting strategy on historical data using multiple lead times.
     
     Args:
+        lead_times: List of lead times to use (e.g., ['1d', '0d'] for 1-day and same-day forecasts)
         min_edge: Minimum edge required (model_prob - market_prob)
         min_ev: Minimum expected value required
         bankroll: Starting bankroll
@@ -144,19 +159,59 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
     print("BACKTESTING BETTING STRATEGY")
     print("="*70)
     
-    # Load error model
-    error_model = load_error_model()
-    print(f"\nError Model:")
-    print(f"  Bias: {error_model['basic_statistics']['mean']:+.2f}°F")
-    print(f"  Std:  {error_model['basic_statistics']['std']:.2f}°F")
+    # Load error models for each lead time
+    error_models = {}
+    print(f"\nError Models:")
+    for lead_time in lead_times:
+        error_models[lead_time] = load_error_model(lead_time)
+        model = error_models[lead_time]
+        lead_name = "Same-day" if lead_time == '0d' else "1-day ahead"
+        print(f"\n  {lead_name} ({lead_time}):")
+        print(f"    Bias (Mean Error): {model['mean']:+.2f}°F")
+        print(f"    Std Dev:           {model['std']:.2f}°F")
+        print(f"    MAE:               {model['mae']:.2f}°F")
+        print(f"    Sample Size:       {model['sample_size']} forecasts")
     
     # Load data
     print(f"\nLoading data...")
-    forecasts = pd.read_csv('data/raw/historical_forecasts.csv')
-    forecasts['forecast_datetime'] = pd.to_datetime(
-        forecasts['forecast_date'] + ' ' + forecasts['forecast_time']
-    )
+    
+    # Load forecasts (handle both old and new formats)
+    forecast_files = [
+        'data/raw/historical_forecasts.csv',
+        'data/raw/openmeteo_previous_runs.csv'
+    ]
+    
+    forecasts = None
+    for file_path in forecast_files:
+        from pathlib import Path
+        if Path(file_path).exists():
+            forecasts = pd.read_csv(file_path)
+            print(f"  Loaded forecasts from: {file_path}")
+            break
+    
+    if forecasts is None:
+        raise FileNotFoundError("No forecast data found")
+    
+    # Parse timestamps and normalize column names
     forecasts['valid_time'] = pd.to_datetime(forecasts['valid_time'])
+    
+    # Handle different CSV formats
+    if 'lead_time' in forecasts.columns:
+        forecasts['forecast_issued'] = pd.to_datetime(forecasts['forecast_issued'])
+    elif 'days_before' in forecasts.columns:
+        forecasts['lead_time'] = forecasts['days_before']
+        forecasts['forecast_issued'] = pd.to_datetime(
+            forecasts['forecast_date'] + ' ' + forecasts['forecast_time']
+        )
+        forecasts['forecast_datetime'] = forecasts['forecast_issued']
+    
+    # Filter to specified lead times
+    lead_time_nums = [int(lt[0]) for lt in lead_times]  # Convert '1d' -> 1, '0d' -> 0
+    forecasts_filtered = forecasts[forecasts['lead_time'].isin(lead_time_nums)].copy()
+    print(f"  Using lead times {lead_times}: {len(forecasts_filtered):,} records")
+    for lt_num in lead_time_nums:
+        count = len(forecasts_filtered[forecasts_filtered['lead_time'] == lt_num])
+        print(f"    {lt_num}-day: {count:,} records")
     
     # Load actual daily max temperatures from Weather Underground (official Polymarket source)
     try:
@@ -173,11 +228,7 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
     odds_df = pd.read_csv('data/raw/polymarket_odds_history.csv')
     odds_df['event_date'] = pd.to_datetime(odds_df['event_date'])
     
-    print(f"  Forecasts: {len(forecasts):,} records")
-    if use_wunderground:
-        print(f"  Daily Max Temps: {len(daily_max):,} days")
-    else:
-        print(f"  Actuals: {len(actuals):,} records")
+    print(f"  Daily Max Temps: {len(daily_max):,} days")
     print(f"  Odds: {len(odds_df):,} records")
     
     # Get unique betting days (days with odds data)
@@ -204,140 +255,143 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
     for betting_day in sorted(betting_days):
         betting_day_dt = pd.to_datetime(betting_day)
         
-        # Get 9 PM forecast from day before
-        forecast_day = betting_day_dt - timedelta(days=1)
-        forecast_day_str = forecast_day.strftime('%Y-%m-%d')
-        
-        # Get 9 PM forecast
-        evening_forecast = forecasts[
-            (forecasts['forecast_date'] == forecast_day_str) &
-            (forecasts['forecast_time'] == '21:00')
-        ].copy()
-        
-        if len(evening_forecast) == 0:
-            continue
-        
-        # Get forecasted max for betting day
-        betting_day_forecasts = evening_forecast[
-            evening_forecast['valid_time'].dt.date == betting_day_dt.date()
+        # Get forecasts for this betting day at different lead times
+        betting_day_forecasts = forecasts_filtered[
+            forecasts_filtered['valid_time'].dt.date == betting_day_dt.date()
         ]
         
         if len(betting_day_forecasts) == 0:
             continue
         
-        forecasted_max = betting_day_forecasts['temperature'].max()
-        
-        # Get actual max for betting day from Weather Underground
-        if use_wunderground:
-            day_max = daily_max[daily_max['date'].dt.date == betting_day_dt.date()]
-            if len(day_max) == 0:
-                continue
-            actual_max = day_max['max_temp_f'].iloc[0]
-        else:
-            # Fallback to calculating from hourly data
-            betting_day_actuals = actuals[
-                actuals['timestamp'].dt.date == betting_day_dt.date()
+        # Group by lead time to get best forecast for each
+        for lead_time_num in lead_time_nums:
+            lead_time_str = f"{lead_time_num}d"
+            
+            # Get forecasts at this lead time
+            lt_forecasts = betting_day_forecasts[
+                betting_day_forecasts['lead_time'] == lead_time_num
             ]
-            if len(betting_day_actuals) == 0:
-                continue
-            actual_max = betting_day_actuals['temperature_f'].max()
-        
-        # Get odds at 9 PM the day before (when we'd actually be betting)
-        # We want odds closest to 9 PM on forecast_day
-        target_time = pd.to_datetime(f"{forecast_day_str} 21:00:00").tz_localize('America/New_York')
-        
-        day_odds = odds_df[odds_df['event_date'] == betting_day].copy()
-        
-        if len(day_odds) == 0:
-            continue
-        
-        # Parse fetch_timestamp with UTC and convert to Eastern time
-        day_odds['fetch_time'] = pd.to_datetime(day_odds['fetch_timestamp'], utc=True).dt.tz_convert('America/New_York')
-        day_odds['time_diff'] = abs((day_odds['fetch_time'] - target_time).dt.total_seconds())
-        
-        # Get the odds snapshot closest to 9 PM for each threshold
-        # Group by threshold and take the row with minimum time difference
-        day_odds = day_odds.sort_values('time_diff').groupby('threshold').first().reset_index()
-        
-        # Analyze each threshold
-        for _, odds_row in day_odds.iterrows():
-            threshold_str = odds_row['threshold']
-            market_prob = odds_row['yes_probability']
             
-            # Parse threshold
-            try:
-                threshold_value, threshold_type = parse_threshold(threshold_str)
-            except:
+            if len(lt_forecasts) == 0:
                 continue
             
-            # Calculate model probability
-            model_prob = calculate_model_probability(
-                forecasted_max, threshold_value, threshold_type, error_model
-            )
-            
-            # Calculate edge and EV
-            edge = model_prob - market_prob
-            
-            if market_prob > 0 and market_prob < 1:
-                payout_multiplier = 1 / market_prob
-                ev = (model_prob * payout_multiplier) - 1
+            forecasted_max = lt_forecasts['temperature'].max()
+            forecast_issued = lt_forecasts['forecast_issued'].iloc[0]
+            error_model = error_models[lead_time_str]
+        
+            # Get actual max for betting day from Weather Underground
+            if use_wunderground:
+                day_max = daily_max[daily_max['date'].dt.date == betting_day_dt.date()]
+                if len(day_max) == 0:
+                    continue
+                actual_max = day_max['max_temp_f'].iloc[0]
             else:
-                ev = 0
+                # Fallback to calculating from hourly data
+                betting_day_actuals = actuals[
+                    actuals['timestamp'].dt.date == betting_day_dt.date()
+                ]
+                if len(betting_day_actuals) == 0:
+                    continue
+                actual_max = betting_day_actuals['temperature_f'].max()
             
-            # Check if bet meets criteria
-            should_bet = (
-                (edge >= min_edge) and 
-                (ev >= min_ev) and 
-                (market_prob >= min_market_prob) and
-                (market_prob <= 0.95)  # Avoid near-certain markets
-            )
+            # Get odds at the time when forecast was issued
+            # We want odds closest to when the forecast was issued
+            target_time = pd.to_datetime(forecast_issued)
+            if target_time.tzinfo is None:
+                target_time = target_time.tz_localize('America/New_York')
             
-            # Calculate bet size using Kelly criterion
-            bet_size = 0
-            if should_bet and market_prob > 0 and market_prob < 1:
-                # Kelly formula: f = (bp - q) / b
-                # where b = odds-1, p = model_prob, q = 1-model_prob
-                b = (1 / market_prob) - 1
-                kelly = (b * model_prob - (1 - model_prob)) / b
-                kelly = max(0, min(kelly, 1))  # Clamp between 0 and 1
-                bet_size = kelly * kelly_fraction * current_bankroll
-                bet_size = min(bet_size, current_bankroll * max_bet_pct)  # Cap at max_bet_pct of bankroll
+            day_odds = odds_df[odds_df['event_date'] == betting_day].copy()
             
-            # Check outcome
-            bet_won = check_bet_outcome(actual_max, threshold_value, threshold_type)
+            if len(day_odds) == 0:
+                continue
             
-            # Calculate profit/loss
-            if should_bet and bet_size > 0:
-                if bet_won:
-                    profit = bet_size * ((1 / market_prob) - 1)
-                else:
-                    profit = -bet_size
+            # Parse fetch_timestamp with UTC and convert to Eastern time
+            day_odds['fetch_time'] = pd.to_datetime(day_odds['fetch_timestamp'], utc=True).dt.tz_convert('America/New_York')
+            day_odds['time_diff'] = abs((day_odds['fetch_time'] - target_time).dt.total_seconds())
+            
+            # Get the odds snapshot closest to forecast time for each threshold
+            # Group by threshold and take the row with minimum time difference
+            day_odds_snapshot = day_odds.sort_values('time_diff').groupby('threshold').first().reset_index()
+            
+            # Analyze each threshold
+            for _, odds_row in day_odds_snapshot.iterrows():
+                threshold_str = odds_row['threshold']
+                market_prob = odds_row['yes_probability']
                 
-                current_bankroll += profit
-            else:
-                profit = 0
-            
-            # Record opportunity
-            opportunities.append({
-                'date': betting_day,
-                'forecast_date': forecast_day_str,
-                'forecast_time': '21:00',
-                'odds_fetch_time': odds_row['fetch_time'],
-                'forecasted_max': forecasted_max,
-                'actual_max': actual_max,
-                'threshold': threshold_str,
-                'threshold_value': threshold_value,
-                'threshold_type': threshold_type,
-                'market_prob': market_prob,
-                'model_prob': model_prob,
-                'edge': edge,
-                'ev': ev,
-                'should_bet': should_bet,
-                'bet_size': bet_size,
-                'bet_won': bet_won,
-                'profit': profit,
-                'bankroll': current_bankroll
-            })
+                # Parse threshold
+                try:
+                    threshold_value, threshold_type = parse_threshold(threshold_str)
+                except:
+                    continue
+                
+                # Calculate model probability
+                model_prob = calculate_model_probability(
+                    forecasted_max, threshold_value, threshold_type, error_model
+                )
+                
+                # Calculate edge and EV
+                edge = model_prob - market_prob
+                
+                if market_prob > 0 and market_prob < 1:
+                    payout_multiplier = 1 / market_prob
+                    ev = (model_prob * payout_multiplier) - 1
+                else:
+                    ev = 0
+                
+                # Check if bet meets criteria
+                should_bet = (
+                    (edge >= min_edge) and 
+                    (ev >= min_ev) and 
+                    (market_prob >= min_market_prob) and
+                    (market_prob <= 0.95)  # Avoid near-certain markets
+                )
+                
+                # Calculate bet size using Kelly criterion
+                bet_size = 0
+                if should_bet and market_prob > 0 and market_prob < 1:
+                    # Kelly formula: f = (bp - q) / b
+                    # where b = odds-1, p = model_prob, q = 1-model_prob
+                    b = (1 / market_prob) - 1
+                    kelly = (b * model_prob - (1 - model_prob)) / b
+                    kelly = max(0, min(kelly, 1))  # Clamp between 0 and 1
+                    bet_size = kelly * kelly_fraction * current_bankroll
+                    bet_size = min(bet_size, current_bankroll * max_bet_pct)  # Cap at max_bet_pct of bankroll
+                
+                # Check outcome
+                bet_won = check_bet_outcome(actual_max, threshold_value, threshold_type)
+                
+                # Calculate profit/loss
+                if should_bet and bet_size > 0:
+                    if bet_won:
+                        profit = bet_size * ((1 / market_prob) - 1)
+                    else:
+                        profit = -bet_size
+                    
+                    current_bankroll += profit
+                else:
+                    profit = 0
+                
+                # Record opportunity
+                opportunities.append({
+                    'date': betting_day,
+                    'lead_time': lead_time_str,
+                    'forecast_issued': forecast_issued,
+                    'odds_fetch_time': odds_row['fetch_time'],
+                    'forecasted_max': forecasted_max,
+                    'actual_max': actual_max,
+                    'threshold': threshold_str,
+                    'threshold_value': threshold_value,
+                    'threshold_type': threshold_type,
+                    'market_prob': market_prob,
+                    'model_prob': model_prob,
+                    'edge': edge,
+                    'ev': ev,
+                    'should_bet': should_bet,
+                    'bet_size': bet_size,
+                    'bet_won': bet_won,
+                    'profit': profit,
+                    'bankroll': current_bankroll
+                })
     
     # Convert to DataFrame
     results_df = pd.DataFrame(opportunities)
@@ -383,7 +437,7 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
         sample_bets = results_df[results_df['should_bet']].head(10)
         for _, bet in sample_bets.iterrows():
             result = "✅ WON" if bet['bet_won'] else "❌ LOST"
-            print(f"{bet['date'].strftime('%Y-%m-%d')}: {bet['threshold']}")
+            print(f"{bet['date'].strftime('%Y-%m-%d')} ({bet['lead_time']}): {bet['threshold']}")
             print(f"  Forecast: {bet['forecasted_max']:.1f}°F, Actual: {bet['actual_max']:.1f}°F")
             print(f"  Model: {bet['model_prob']:.1%}, Market: {bet['market_prob']:.1%}, Edge: {bet['edge']:+.1%}")
             print(f"  Bet: ${bet['bet_size']:.2f}, {result}, Profit: ${bet['profit']:+.2f}")
@@ -395,12 +449,13 @@ def backtest_strategy(min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=
 if __name__ == '__main__':
     # Run backtest with default parameters
     results = backtest_strategy(
-        min_edge=0.05,          # Require 5% edge
-        min_ev=0.05,            # Require 5% expected value
-        min_market_prob=0.05,   # Avoid illiquid markets below 5%
-        bankroll=1000,          # Start with $1000
-        kelly_fraction=0.25,    # Use quarter Kelly
-        max_bet_pct=0.05        # Max 5% of bankroll per bet
+        lead_times=['1d', '0d'],  # Use 1-day and same-day forecasts
+        min_edge=0.05,            # Require 5% edge
+        min_ev=0.05,              # Require 5% expected value
+        min_market_prob=0.05,     # Avoid illiquid markets below 5%
+        bankroll=1000,            # Start with $1000
+        kelly_fraction=0.25,      # Use quarter Kelly
+        max_bet_pct=0.05          # Max 5% of bankroll per bet
     )
     
     print(f"\n{'='*70}")

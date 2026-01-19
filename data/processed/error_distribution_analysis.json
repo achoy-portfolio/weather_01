@@ -1,69 +1,146 @@
 {
-  "created_at": "2026-01-18T22:24:48.989123",
-  "sample_size": 361,
-  "basic_statistics": {
-    "mean": 0.26897506925207776,
-    "median": 0.3999999999999986,
-    "std": 1.6092121580020333,
-    "min": -4.700000000000003,
-    "max": 18.0
-  },
-  "percentiles": {
-    "p5": -2.200000000000003,
-    "p10": -1.5,
-    "p25": -0.5999999999999943,
-    "p50": 0.3999999999999986,
-    "p75": 1.1000000000000014,
-    "p90": 1.7999999999999972,
-    "p95": 2.200000000000003
-  },
-  "normality_tests": {
-    "shapiro_wilk": {
-      "statistic": 0.09748617162421491,
-      "p_value": 0.0019422612790567684,
-      "is_normal": false
+  "created_at": "2026-01-18T23:06:31.915747",
+  "sample_size": 1098,
+  "by_lead_time": {
+    "0d": {
+      "sample_size": 366,
+      "mean": 0.2595628415300548,
+      "median": 0.29999999999999716,
+      "std": 1.6013668427866945,
+      "mae": 1.100546448087432,
+      "min": -4.700000000000003,
+      "max": 18.0,
+      "percentiles": {
+        "p5": -2.1750000000000025,
+        "p10": -1.5,
+        "p25": -0.5749999999999957,
+        "p50": 0.29999999999999716,
+        "p75": 1.0999999999999943,
+        "p90": 1.7999999999999972,
+        "p95": 2.200000000000003
+      },
+      "normality": {
+        "shapiro_wilk_p": 6.373452518074607e-21,
+        "is_normal": false,
+        "skewness": 3.416855842496251,
+        "kurtosis": 39.72582177567019
+      },
+      "distribution_fit": {
+        "within_1std_pct": 79.23497267759562,
+        "within_2std_pct": 98.90710382513662,
+        "matches_normal": false
+      },
+      "confidence_intervals": {
+        "50_pct": 0.8999999999999986,
+        "68_pct": 1.2999999999999972,
+        "90_pct": 2.200000000000003,
+        "95_pct": 2.700000000000002
+      }
     },
-    "skewness": 3.399641707938712,
-    "kurtosis": 39.39597349952481
-  },
-  "distribution_fit": {
-    "within_1std": {
-      "actual_pct": 79.22437673130193,
-      "expected_pct": 68.3,
-      "std_value": 1.6092121580020333,
-      "matches": false
+    "1d": {
+      "sample_size": 366,
+      "mean": -0.4934426229508198,
+      "median": -0.25,
+      "std": 3.1328003248089678,
+      "mae": 2.399453551912568,
+      "min": -11.0,
+      "max": 14.100000000000001,
+      "percentiles": {
+        "p5": -6.075000000000001,
+        "p10": -4.5,
+        "p25": -2.299999999999997,
+        "p50": -0.25,
+        "p75": 1.5,
+        "p90": 2.8999999999999986,
+        "p95": 4.175000000000001
+      },
+      "normality": {
+        "shapiro_wilk_p": 0.0004054320608996744,
+        "is_normal": false,
+        "skewness": -0.002294979739445864,
+        "kurtosis": 1.4191868176452243
+      },
+      "distribution_fit": {
+        "within_1std_pct": 73.49726775956285,
+        "within_2std_pct": 93.71584699453553,
+        "matches_normal": false
+      },
+      "confidence_intervals": {
+        "50_pct": 1.8999999999999986,
+        "68_pct": 2.799999999999997,
+        "90_pct": 5.150000000000002,
+        "95_pct": 6.6750000000000025
+      }
     },
-    "within_2std": {
-      "actual_pct": 98.89196675900277,
-      "expected_pct": 95.4,
-      "std_value": 3.2184243160040666,
-      "matches": true
-    },
-    "within_3std": {
-      "actual_pct": 99.44598337950139,
-      "expected_pct": 99.7,
-      "std_value": 4.8276364740061,
-      "matches": true
+    "2d": {
+      "sample_size": 366,
+      "mean": -0.19754098360655764,
+      "median": -0.20000000000000284,
+      "std": 3.737364061487958,
+      "mae": 2.8346994535519126,
+      "min": -13.200000000000003,
+      "max": 19.5,
+      "percentiles": {
+        "p5": -6.0,
+        "p10": -4.700000000000003,
+        "p25": -2.4750000000000014,
+        "p50": -0.20000000000000284,
+        "p75": 2.0749999999999957,
+        "p90": 4.25,
+        "p95": 5.5
+      },
+      "normality": {
+        "shapiro_wilk_p": 2.836915264622829e-06,
+        "is_normal": false,
+        "skewness": 0.4395145056552379,
+        "kurtosis": 2.5701675937457535
+      },
+      "distribution_fit": {
+        "within_1std_pct": 71.85792349726776,
+        "within_2std_pct": 96.99453551912568,
+        "matches_normal": true
+      },
+      "confidence_intervals": {
+        "50_pct": 2.25,
+        "68_pct": 3.420000000000006,
+        "90_pct": 5.849999999999998,
+        "95_pct": 7.0
+      }
     }
   },
-  "confidence_intervals": {
-    "50_pct": {
-      "range": 0.8999999999999986,
-      "description": "50% of forecasts within this range"
+  "overall": {
+    "sample_size": 1098,
+    "mean": -0.14380692167577414,
+    "median": 0.04999999999999716,
+    "std": 2.979627684084482,
+    "mae": 2.1115664845173043,
+    "min": -13.200000000000003,
+    "max": 19.5,
+    "percentiles": {
+      "p5": -5.115000000000001,
+      "p10": -3.700000000000003,
+      "p25": -1.6000000000000014,
+      "p50": 0.04999999999999716,
+      "p75": 1.400000000000004,
+      "p90": 2.9000000000000057,
+      "p95": 4.299999999999997
     },
-    "68_pct": {
-      "range": 1.2999999999999972,
-      "description": "68% of forecasts within this range"
+    "normality": {
+      "shapiro_wilk_p": 1.1905447253607276e-19,
+      "is_normal": false,
+      "skewness": 0.3463238416957477,
+      "kurtosis": 4.7016414818839785
     },
-    "90_pct": {
-      "range": 2.200000000000003,
-      "description": "90% of forecasts within this range"
+    "distribution_fit": {
+      "within_1std_pct": 77.41347905282332,
+      "within_2std_pct": 94.53551912568307,
+      "matches_normal": false
     },
-    "95_pct": {
-      "range": 2.700000000000003,
-      "description": "95% of forecasts within this range"
+    "confidence_intervals": {
+      "50_pct": 1.5,
+      "68_pct": 2.3999999999999986,
+      "90_pct": 4.799999999999997,
+      "95_pct": 6.200000000000003
     }
-  },
-  "is_approximately_normal": false,
-  "recommendation": "Use empirical percentiles"
+  }
 }
