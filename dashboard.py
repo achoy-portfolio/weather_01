@@ -12,7 +12,7 @@ import sys
 import os
 
 # Add scripts to path
-sys.path.insert(0, 'scripts')
+sys.path.insert(0, 'scripts/pipelines')
 
 # Import pipeline functions
 from polymarket_pipeline import (

@@ -302,22 +302,22 @@ def fetch_visual_crossing_forecast(target_date):
 # Fetch actual temperature readings from NWS
 @st.cache_data(ttl=60)
 def fetch_actual_temperatures(target_date):
-    """Fetch actual temperature observations from NWS (up to 7 days past)"""
+    """Fetch actual temperature observations from NWS (includes current day up to now)"""
     try:
         from src.data.weather_scraper import WeatherScraper
         
         scraper = WeatherScraper(station_id="KLGA")
         
-        # Get data from 3 days before to now
-        now = datetime.now(timezone.utc)
-        start_dt = now - timedelta(days=3)
+        # Get data from 3 days before to now (in UTC for API)
+        now_utc = datetime.now(timezone.utc)
+        start_dt = now_utc - timedelta(days=3)
         
         # Fetch in 24-hour chunks
         all_dfs = []
         current_start = start_dt
         
-        while current_start < now:
-            current_end = min(current_start + timedelta(hours=24), now)
+        while current_start < now_utc:
+            current_end = min(current_start + timedelta(hours=24), now_utc)
             
             try:
                 df_chunk = scraper.fetch_raw_observations(current_start, current_end)
@@ -336,11 +336,18 @@ def fetch_actual_temperatures(target_date):
         df = df.sort_index()
         df = df[~df.index.duplicated(keep='first')]
         
+        # Convert to NY timezone
         df.index = df.index.tz_convert(NY_TZ)
         df = df.reset_index()
         df = df.rename(columns={'index': 'timestamp'})
         
+        # Add date column in NY timezone
         df['date'] = df['timestamp'].dt.date
+        
+        # Debug info
+        if not df.empty:
+            date_range = f"{df['date'].min()} to {df['date'].max()}"
+            st.sidebar.success(f"✓ NWS Actual: {len(df)} readings from {date_range}")
         
         return df[['timestamp', 'temp_f', 'date']].copy()
         
@@ -684,9 +691,9 @@ tomorrow = today + timedelta(days=1)
 selected_date = st.sidebar.date_input(
     "Market Date",
     value=tomorrow,
-    min_value=tomorrow,  # Can't select today since forecast starts from tomorrow
-    max_value=today + timedelta(days=16),  # Open-Meteo supports up to 16 days
-    help="Select which date's market to analyze (forecast available from tomorrow onwards)"
+    min_value=today,  # Can select today
+    max_value=today + timedelta(days=16),
+    help="Select which date's market to analyze (today uses Visual Crossing, future dates use Open-Meteo)"
 )
 
 # Bankroll input
@@ -759,11 +766,26 @@ lead_time = '0d' if 'Same-day' in lead_time_option else '1d'
 
 # Forecast source selection
 st.sidebar.markdown("### Forecast Source")
+
+# Determine available sources based on selected date
+is_today = (selected_date == date.today())
+available_sources = []
+
+if not is_today:
+    available_sources.append("Open-Meteo")
+
+available_sources.extend(["NWS", "Visual Crossing", "Average of All"])
+
+# Set default based on date
+default_index = 0
+if is_today and "Visual Crossing" in available_sources:
+    default_index = available_sources.index("Visual Crossing")
+
 forecast_source = st.sidebar.radio(
     "Which forecast to use for max temp",
-    options=["Open-Meteo", "NWS", "Visual Crossing", "Average of All"],
-    index=0,
-    help="Select which forecast source to use for betting recommendations"
+    options=available_sources,
+    index=default_index,
+    help="Select which forecast source to use for betting recommendations. Open-Meteo not available for current day."
 )
 
 st.sidebar.markdown("---")
@@ -778,22 +800,36 @@ if error_model is None:
 
 # Fetch data
 with st.spinner("Loading forecast and market data..."):
-    forecast_df = fetch_openmeteo_forecast(selected_date)
+    # Determine if we're looking at today
+    is_today = (selected_date == date.today())
+    
+    # Show current time for debugging
+    current_time_et = datetime.now(NY_TZ)
+    st.sidebar.info(f"🕐 Current time: {current_time_et.strftime('%b %d, %Y %I:%M %p ET')}")
+    
+    # For today, prioritize Visual Crossing (has current day data)
+    # For future dates, use Open-Meteo
+    if is_today:
+        st.sidebar.info("📅 Today's market - using Visual Crossing for current day forecast")
+        forecast_df = None  # Open-Meteo doesn't have today
+    else:
+        forecast_df = fetch_openmeteo_forecast(selected_date)
+    
     odds_df = fetch_polymarket_odds(selected_date)
     nws_forecast_df = fetch_nws_forecast()
     vc_forecast_df = fetch_visual_crossing_forecast(selected_date)
     actual_temps_df = fetch_actual_temperatures(selected_date)
 
 # Check if data is available
-if forecast_df is None:
+if forecast_df is None and vc_forecast_df is None and nws_forecast_df is None:
     st.error(f"❌ No forecast data available for {selected_date}")
     days_ahead = (selected_date - date.today()).days
+    
     if days_ahead < 0:
         st.info("💡 Cannot get forecast for past dates. Select today or a future date.")
     elif days_ahead == 0:
-        st.info("💡 Open-Meteo forecast API doesn't include today's data (it starts from tomorrow).")
-        st.info("📅 Please select tomorrow or a future date.")
-        st.info(f"Try: {(date.today() + timedelta(days=1)).strftime('%B %d, %Y')}")
+        st.info("💡 For today's forecast, Visual Crossing API key is required.")
+        st.info("📝 Add VISUAL_CROSSING_API_KEY to your .env file or Streamlit secrets")
     elif days_ahead > 16:
         st.info("💡 Open-Meteo only provides forecasts up to 16 days ahead.")
     else:
@@ -808,6 +844,14 @@ if odds_df is None:
 
 # Calculate forecasted max based on selected source
 forecasted_max_betting_day = None
+is_today = (selected_date == date.today())
+
+# For today, we might have partial actual data - use it if available
+if is_today and actual_temps_df is not None:
+    actual_today = actual_temps_df[actual_temps_df['date'] == selected_date]
+    if not actual_today.empty:
+        current_max = actual_today['temp_f'].max()
+        st.sidebar.info(f"📊 Current max today: {current_max:.1f}°F (so far)")
 
 if forecast_source == "Open-Meteo" and forecast_df is not None:
     betting_day_data = forecast_df[forecast_df['date'] == selected_date]
@@ -856,6 +900,17 @@ recommendations = generate_recommendations(
 
 # Display error model info
 st.markdown("### 📊 Model Information")
+
+# Show special notice for today's market
+is_today = (selected_date == date.today())
+if is_today:
+    st.info("""
+    📅 **Today's Market** - Using real-time data where available. 
+    - Actual temps shown up to current time
+    - Forecast used for remaining hours
+    - Consider current max when evaluating bets
+    """)
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -912,6 +967,20 @@ st.markdown("### 🌡️ Temperature Forecasts Comparison")
 openmeteo_max = None
 nws_max = None
 vc_max = None
+actual_max_so_far = None
+
+# Check if we have actual data for today
+is_today = (selected_date == date.today())
+if is_today and actual_temps_df is not None:
+    actual_today = actual_temps_df[actual_temps_df['date'] == selected_date]
+    if not actual_today.empty:
+        actual_max_so_far = actual_today['temp_f'].max()
+        # Debug: show time range of actual data
+        first_time = actual_today['timestamp'].min().strftime('%I:%M %p')
+        last_time = actual_today['timestamp'].max().strftime('%I:%M %p')
+        st.sidebar.info(f"📊 Today's actual data: {first_time} to {last_time} ET ({len(actual_today)} readings)")
+    else:
+        st.sidebar.warning(f"⚠️ No actual data found for {selected_date} yet")
 
 # Get forecasted max for the betting day only
 if forecast_df is not None:
@@ -947,10 +1016,28 @@ if forecast_source == "Average of All":
 else:
     st.info(f"📊 Using **{forecast_source}** forecast for betting recommendations (highlighted with green border below)")
 
-# Display forecast max cards with highlighting for selected source
-col1, col2, col3 = st.columns(3)
+# Show current max if today
+if is_today and actual_max_so_far is not None:
+    st.success(f"🌡️ **Current max today (so far): {actual_max_so_far:.1f}°F** - Forecast predicts max of {forecasted_max_betting_day:.1f}°F by end of day")
 
-with col1:
+# Display forecast max cards with highlighting for selected source
+num_cols = 4 if (is_today and actual_max_so_far is not None) else 3
+cols = st.columns(num_cols)
+
+# Show actual max first if today
+col_idx = 0
+if is_today and actual_max_so_far is not None:
+    with cols[col_idx]:
+        st.markdown(f"""
+        <div class="metric-card" style="border: 3px solid #E53E3E; box-shadow: 0 4px 16px rgba(229, 62, 62, 0.3);">
+            <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Actual Max (So Far)</div>
+            <div style="font-size: 2rem; font-weight: 700; color: #E53E3E; margin: 0.5rem 0;">{actual_max_so_far:.1f}°F</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">As of {datetime.now(NY_TZ).strftime('%I:%M %p ET')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    col_idx += 1
+
+with cols[col_idx]:
     selected_style = "border: 3px solid #48BB78; box-shadow: 0 4px 16px rgba(72, 187, 120, 0.3);" if forecast_source == "Open-Meteo" or (forecast_source == "Average of All" and openmeteo_max is not None) else ""
     if openmeteo_max is not None:
         st.markdown(f"""
@@ -961,15 +1048,17 @@ with col1:
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.markdown("""
+        unavailable_reason = "Not available for today" if is_today else "Not available"
+        st.markdown(f"""
         <div class="metric-card">
             <div style="font-size: 0.8rem; color: #718096; text-transform: uppercase; letter-spacing: 0.8px;">Open-Meteo Max</div>
             <div style="font-size: 2rem; font-weight: 700; color: #CBD5E0; margin: 0.5rem 0;">—</div>
-            <div style="font-size: 0.875rem; color: #A0AEC0;">Not available</div>
+            <div style="font-size: 0.875rem; color: #A0AEC0;">{unavailable_reason}</div>
         </div>
         """, unsafe_allow_html=True)
+col_idx += 1
 
-with col2:
+with cols[col_idx]:
     selected_style = "border: 3px solid #48BB78; box-shadow: 0 4px 16px rgba(72, 187, 120, 0.3);" if forecast_source == "NWS" or (forecast_source == "Average of All" and nws_max is not None) else ""
     if nws_max is not None:
         st.markdown(f"""
@@ -987,8 +1076,9 @@ with col2:
             <div style="font-size: 0.875rem; color: #A0AEC0;">Not available</div>
         </div>
         """, unsafe_allow_html=True)
+col_idx += 1
 
-with col3:
+with cols[col_idx]:
     selected_style = "border: 3px solid #48BB78; box-shadow: 0 4px 16px rgba(72, 187, 120, 0.3);" if forecast_source == "Visual Crossing" or (forecast_source == "Average of All" and vc_max is not None) else ""
     if vc_max is not None:
         st.markdown(f"""
@@ -1011,10 +1101,16 @@ with col3:
 if forecast_df is not None or nws_forecast_df is not None or vc_forecast_df is not None or actual_temps_df is not None:
     fig_forecast = go.Figure()
     
-    # Define 72-hour window from current time
+    # Define dynamic window based on selected date
     now = datetime.now(NY_TZ)
     window_start = now - timedelta(hours=24)  # 24 hours ago
-    window_end = now + timedelta(hours=48)    # 48 hours ahead
+    
+    # Calculate end of target date
+    target_date_end_dt = datetime.combine(selected_date + timedelta(days=1), datetime.min.time()).replace(tzinfo=NY_TZ)
+    
+    # Extend window to at least cover the target date + 12 hours buffer
+    min_window_end = target_date_end_dt + timedelta(hours=12)
+    window_end = max(now + timedelta(hours=48), min_window_end)  # At least 48 hours or until target date + buffer
     
     # Define target date boundaries at midnight ET
     target_date_start = datetime.combine(selected_date, datetime.min.time()).replace(tzinfo=NY_TZ)
@@ -1022,16 +1118,24 @@ if forecast_df is not None or nws_forecast_df is not None or vc_forecast_df is n
     
     # Add actual temperature readings (if available)
     if actual_temps_df is not None:
-        # Filter to 72-hour window
+        # Filter to window (from 24h ago to now)
         actual_window = actual_temps_df[
             (actual_temps_df['timestamp'] >= window_start) & 
             (actual_temps_df['timestamp'] <= now)
         ]
         
         if not actual_window.empty:
+            # Debug: show what dates we have
+            unique_dates = actual_window['date'].unique()
+            st.sidebar.info(f"📊 Actual temps available for: {', '.join([str(d) for d in sorted(unique_dates)])}")
+            
             # Split by date relative to target
             actual_before = actual_window[actual_window['date'] < selected_date]
             actual_target = actual_window[actual_window['date'] == selected_date]
+            
+            # Debug: show counts
+            if not actual_target.empty:
+                st.sidebar.success(f"✓ {len(actual_target)} actual readings for {selected_date}")
             
             # Plot actual temps before target date (gray)
             if not actual_before.empty:
@@ -1054,6 +1158,8 @@ if forecast_df is not None or nws_forecast_df is not None or vc_forecast_df is n
                     line=dict(color='#E53E3E', width=3.5),
                     hovertemplate='Actual: %{y:.1f}°F<br>%{x}<extra></extra>'
                 ))
+        else:
+            st.sidebar.info(f"ℹ️ No actual temps in window ({window_start.strftime('%b %d %I:%M%p')} to now)")
     
     # Add Open-Meteo forecast (filter to window)
     if forecast_df is not None:
@@ -1149,8 +1255,11 @@ if forecast_df is not None or nws_forecast_df is not None or vc_forecast_df is n
             yshift=10, font=dict(size=10)
         )
     
+    # Calculate hours shown for title
+    hours_shown = int((window_end - window_start).total_seconds() / 3600)
+    
     fig_forecast.update_layout(
-        title=f"72-Hour Temperature Window - {selected_date.strftime('%B %d, %Y')}",
+        title=f"{hours_shown}-Hour Temperature Window - {selected_date.strftime('%B %d, %Y')}",
         xaxis_title="Time (ET)",
         yaxis_title="Temperature (°F)",
         height=500,
