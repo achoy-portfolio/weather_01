@@ -138,7 +138,52 @@ def check_bet_outcome(actual_temp, threshold, threshold_type):
     return False
 
 
-def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=0.25, max_bet_pct=0.05, min_market_prob=0.05, min_volume=100, max_bet_vs_volume=0.10):
+def should_consider_no_bet(forecasted_max, threshold_value, threshold_type, min_distance=2):
+    """
+    Determine if we should consider betting NO on a threshold.
+    
+    Logic: If forecast is 25-26°F, we might bet NO on 23-24 or 21-22 
+    because we're confident the temp will be higher.
+    
+    Args:
+        forecasted_max: Forecasted temperature
+        threshold_value: Threshold value (midpoint for ranges)
+        threshold_type: 'above', 'below', or 'range'
+        min_distance: Minimum distance in degrees from forecast
+    
+    Returns:
+        True if NO bet should be considered
+    """
+    if threshold_type != 'range':
+        # Only consider NO bets on range markets for now
+        return False
+    
+    # Bet NO if the threshold is significantly below our forecast
+    # (we're confident it won't land in that range)
+    distance = forecasted_max - threshold_value
+    
+    return distance >= min_distance
+
+
+def calculate_no_bet_probability(forecast_temp, threshold, threshold_type, error_model):
+    """
+    Calculate probability that a NO bet wins (i.e., actual temp does NOT meet threshold).
+    
+    Args:
+        forecast_temp: Forecasted temperature
+        threshold: Threshold value (midpoint for ranges)
+        threshold_type: 'above', 'below', or 'range'
+        error_model: Loaded error model for specified lead time
+    
+    Returns:
+        Probability that NO bet wins (0 to 1)
+    """
+    # NO bet wins when YES bet loses
+    yes_prob = calculate_model_probability(forecast_temp, threshold, threshold_type, error_model)
+    return 1 - yes_prob
+
+
+def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankroll=1000, kelly_fraction=0.25, max_bet_pct=0.05, min_market_prob=0.05, min_volume=100, max_bet_vs_volume=0.10, enable_no_bets=True, no_bet_min_distance=2):
     """
     Backtest the betting strategy on historical data using multiple lead times.
     
@@ -152,6 +197,8 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
         min_market_prob: Minimum market probability to consider (avoid illiquid markets)
         min_volume: Minimum market volume required (default $100)
         max_bet_vs_volume: Maximum bet size as fraction of market volume (default 10%)
+        enable_no_bets: Whether to consider betting NO on ranges (default True)
+        no_bet_min_distance: Minimum distance in degrees from forecast to bet NO (default 2)
     
     Returns:
         DataFrame with all betting opportunities and results
@@ -247,6 +294,9 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
     print(f"  Bankroll: ${bankroll:,.0f}")
     print(f"  Kelly Fraction: {kelly_fraction:.1%}")
     print(f"  Max Bet %: {max_bet_pct:.1%}")
+    print(f"  NO Bets Enabled: {enable_no_bets}")
+    if enable_no_bets:
+        print(f"  NO Bet Min Distance: {no_bet_min_distance}°F")
     
     # Track all opportunities
     opportunities = []
@@ -329,62 +379,62 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
                 except:
                     continue
                 
-                # Calculate model probability
-                model_prob = calculate_model_probability(
+                # Calculate model probability for YES bet
+                model_prob_yes = calculate_model_probability(
                     forecasted_max, threshold_value, threshold_type, error_model
                 )
                 
-                # Calculate edge and EV
-                edge = model_prob - market_prob
+                # Calculate edge and EV for YES bet
+                edge_yes = model_prob_yes - market_prob
                 
                 if market_prob > 0 and market_prob < 1:
-                    payout_multiplier = 1 / market_prob
-                    ev = (model_prob * payout_multiplier) - 1
+                    payout_multiplier_yes = 1 / market_prob
+                    ev_yes = (model_prob_yes * payout_multiplier_yes) - 1
                 else:
-                    ev = 0
+                    ev_yes = 0
                 
-                # Check if bet meets criteria (including liquidity)
-                should_bet = (
-                    (edge >= min_edge) and 
-                    (ev >= min_ev) and 
+                # Check if YES bet meets criteria (including liquidity)
+                should_bet_yes = (
+                    (edge_yes >= min_edge) and 
+                    (ev_yes >= min_ev) and 
                     (market_prob >= min_market_prob) and
                     (market_prob <= 0.95) and  # Avoid near-certain markets
                     (market_volume >= min_volume)  # Require minimum liquidity
                 )
                 
-                # Calculate bet size using Kelly criterion
-                bet_size = 0
-                liquidity_constrained = False
-                if should_bet and market_prob > 0 and market_prob < 1:
+                # Calculate bet size for YES using Kelly criterion
+                bet_size_yes = 0
+                liquidity_constrained_yes = False
+                if should_bet_yes and market_prob > 0 and market_prob < 1:
                     # Kelly formula: f = (bp - q) / b
                     # where b = odds-1, p = model_prob, q = 1-model_prob
                     b = (1 / market_prob) - 1
-                    kelly = (b * model_prob - (1 - model_prob)) / b
+                    kelly = (b * model_prob_yes - (1 - model_prob_yes)) / b
                     kelly = max(0, min(kelly, 1))  # Clamp between 0 and 1
-                    bet_size = kelly * kelly_fraction * current_bankroll
-                    bet_size = min(bet_size, current_bankroll * max_bet_pct)  # Cap at max_bet_pct of bankroll
+                    bet_size_yes = kelly * kelly_fraction * current_bankroll
+                    bet_size_yes = min(bet_size_yes, current_bankroll * max_bet_pct)  # Cap at max_bet_pct of bankroll
                     
                     # Apply liquidity constraint - can't bet more than X% of market volume
                     max_bet_from_volume = market_volume * max_bet_vs_volume
-                    if bet_size > max_bet_from_volume:
-                        bet_size = max_bet_from_volume
-                        liquidity_constrained = True
+                    if bet_size_yes > max_bet_from_volume:
+                        bet_size_yes = max_bet_from_volume
+                        liquidity_constrained_yes = True
                 
-                # Check outcome
-                bet_won = check_bet_outcome(actual_max, threshold_value, threshold_type)
+                # Check outcome for YES bet
+                bet_won_yes = check_bet_outcome(actual_max, threshold_value, threshold_type)
                 
-                # Calculate profit/loss
-                if should_bet and bet_size > 0:
-                    if bet_won:
-                        profit = bet_size * ((1 / market_prob) - 1)
+                # Calculate profit/loss for YES bet
+                if should_bet_yes and bet_size_yes > 0:
+                    if bet_won_yes:
+                        profit_yes = bet_size_yes * ((1 / market_prob) - 1)
                     else:
-                        profit = -bet_size
+                        profit_yes = -bet_size_yes
                     
-                    current_bankroll += profit
+                    current_bankroll += profit_yes
                 else:
-                    profit = 0
+                    profit_yes = 0
                 
-                # Record opportunity
+                # Record YES opportunity
                 opportunities.append({
                     'date': betting_day,
                     'lead_time': lead_time_str,
@@ -395,18 +445,101 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
                     'threshold': threshold_str,
                     'threshold_value': threshold_value,
                     'threshold_type': threshold_type,
+                    'bet_side': 'YES',
                     'market_prob': market_prob,
                     'market_volume': market_volume,
-                    'model_prob': model_prob,
-                    'edge': edge,
-                    'ev': ev,
-                    'should_bet': should_bet,
-                    'bet_size': bet_size,
-                    'liquidity_constrained': liquidity_constrained,
-                    'bet_won': bet_won,
-                    'profit': profit,
+                    'model_prob': model_prob_yes,
+                    'edge': edge_yes,
+                    'ev': ev_yes,
+                    'should_bet': should_bet_yes,
+                    'bet_size': bet_size_yes,
+                    'liquidity_constrained': liquidity_constrained_yes,
+                    'bet_won': bet_won_yes,
+                    'profit': profit_yes,
                     'bankroll': current_bankroll
                 })
+                
+                # === NO BET LOGIC ===
+                if enable_no_bets and should_consider_no_bet(forecasted_max, threshold_value, threshold_type, no_bet_min_distance):
+                    # Calculate model probability for NO bet (probability that YES loses)
+                    model_prob_no = calculate_no_bet_probability(
+                        forecasted_max, threshold_value, threshold_type, error_model
+                    )
+                    
+                    # Market probability for NO is (1 - yes_probability)
+                    market_prob_no = 1 - market_prob
+                    
+                    # Calculate edge and EV for NO bet
+                    edge_no = model_prob_no - market_prob_no
+                    
+                    if market_prob_no > 0 and market_prob_no < 1:
+                        payout_multiplier_no = 1 / market_prob_no
+                        ev_no = (model_prob_no * payout_multiplier_no) - 1
+                    else:
+                        ev_no = 0
+                    
+                    # Check if NO bet meets criteria
+                    should_bet_no = (
+                        (edge_no >= min_edge) and 
+                        (ev_no >= min_ev) and 
+                        (market_prob_no >= min_market_prob) and
+                        (market_prob_no <= 0.95) and
+                        (market_volume >= min_volume)
+                    )
+                    
+                    # Calculate bet size for NO using Kelly criterion
+                    bet_size_no = 0
+                    liquidity_constrained_no = False
+                    if should_bet_no and market_prob_no > 0 and market_prob_no < 1:
+                        b = (1 / market_prob_no) - 1
+                        kelly = (b * model_prob_no - (1 - model_prob_no)) / b
+                        kelly = max(0, min(kelly, 1))
+                        bet_size_no = kelly * kelly_fraction * current_bankroll
+                        bet_size_no = min(bet_size_no, current_bankroll * max_bet_pct)
+                        
+                        max_bet_from_volume = market_volume * max_bet_vs_volume
+                        if bet_size_no > max_bet_from_volume:
+                            bet_size_no = max_bet_from_volume
+                            liquidity_constrained_no = True
+                    
+                    # Check outcome for NO bet (NO wins if YES loses)
+                    bet_won_no = not bet_won_yes
+                    
+                    # Calculate profit/loss for NO bet
+                    if should_bet_no and bet_size_no > 0:
+                        if bet_won_no:
+                            profit_no = bet_size_no * ((1 / market_prob_no) - 1)
+                        else:
+                            profit_no = -bet_size_no
+                        
+                        current_bankroll += profit_no
+                    else:
+                        profit_no = 0
+                    
+                    # Record NO opportunity
+                    opportunities.append({
+                        'date': betting_day,
+                        'lead_time': lead_time_str,
+                        'forecast_issued': forecast_issued,
+                        'odds_fetch_time': odds_row['fetch_time'],
+                        'forecasted_max': forecasted_max,
+                        'actual_max': actual_max,
+                        'threshold': threshold_str,
+                        'threshold_value': threshold_value,
+                        'threshold_type': threshold_type,
+                        'bet_side': 'NO',
+                        'market_prob': market_prob_no,
+                        'market_volume': market_volume,
+                        'model_prob': model_prob_no,
+                        'edge': edge_no,
+                        'ev': ev_no,
+                        'should_bet': should_bet_no,
+                        'bet_size': bet_size_no,
+                        'liquidity_constrained': liquidity_constrained_no,
+                        'bet_won': bet_won_no,
+                        'profit': profit_no,
+                        'bankroll': current_bankroll
+                    })
     
     # Convert to DataFrame
     results_df = pd.DataFrame(opportunities)
@@ -425,19 +558,31 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
     bets_won = results_df[results_df['should_bet']]['bet_won'].sum()
     liquidity_constrained_count = results_df[results_df['should_bet']]['liquidity_constrained'].sum()
     
+    # Separate YES and NO bets
+    yes_bets = results_df[(results_df['should_bet']) & (results_df['bet_side'] == 'YES')]
+    no_bets = results_df[(results_df['should_bet']) & (results_df['bet_side'] == 'NO')]
+    
     print(f"\nTotal Opportunities Analyzed: {total_opportunities}")
     print(f"Bets Placed: {bets_placed}")
+    print(f"  YES Bets: {len(yes_bets)}")
+    print(f"  NO Bets: {len(no_bets)}")
     print(f"Bets Won: {bets_won}")
-    print(f"Win Rate: {(bets_won / bets_placed * 100) if bets_placed > 0 else 0:.1f}%")
+    print(f"  YES Bets Won: {yes_bets['bet_won'].sum()} / {len(yes_bets)} ({(yes_bets['bet_won'].sum() / len(yes_bets) * 100) if len(yes_bets) > 0 else 0:.1f}%)")
+    print(f"  NO Bets Won: {no_bets['bet_won'].sum()} / {len(no_bets)} ({(no_bets['bet_won'].sum() / len(no_bets) * 100) if len(no_bets) > 0 else 0:.1f}%)")
+    print(f"Overall Win Rate: {(bets_won / bets_placed * 100) if bets_placed > 0 else 0:.1f}%")
     print(f"Liquidity Constrained Bets: {liquidity_constrained_count} ({(liquidity_constrained_count / bets_placed * 100) if bets_placed > 0 else 0:.1f}%)")
     
     total_profit = results_df[results_df['should_bet']]['profit'].sum()
+    yes_profit = yes_bets['profit'].sum() if len(yes_bets) > 0 else 0
+    no_profit = no_bets['profit'].sum() if len(no_bets) > 0 else 0
     roi = (total_profit / bankroll) * 100
     
     print(f"\nFinancial Results:")
     print(f"  Starting Bankroll: ${bankroll:,.2f}")
     print(f"  Ending Bankroll:   ${current_bankroll:,.2f}")
     print(f"  Total Profit:      ${total_profit:+,.2f}")
+    print(f"    YES Bets Profit: ${yes_profit:+,.2f}")
+    print(f"    NO Bets Profit:  ${no_profit:+,.2f}")
     print(f"  ROI:               {roi:+.1f}%")
     
     # Save results
@@ -455,7 +600,8 @@ def backtest_strategy(lead_times=['1d', '0d'], min_edge=0.05, min_ev=0.05, bankr
         for _, bet in sample_bets.iterrows():
             result = "✅ WON" if bet['bet_won'] else "❌ LOST"
             liquidity_note = " [LIQUIDITY CAPPED]" if bet['liquidity_constrained'] else ""
-            print(f"{bet['date'].strftime('%Y-%m-%d')} ({bet['lead_time']}): {bet['threshold']}")
+            bet_side = bet['bet_side']
+            print(f"{bet['date'].strftime('%Y-%m-%d')} ({bet['lead_time']}): {bet_side} on {bet['threshold']}")
             print(f"  Forecast: {bet['forecasted_max']:.1f}°F, Actual: {bet['actual_max']:.1f}°F")
             print(f"  Model: {bet['model_prob']:.1%}, Market: {bet['market_prob']:.1%}, Edge: {bet['edge']:+.1%}")
             print(f"  Volume: ${bet['market_volume']:.0f}, Bet: ${bet['bet_size']:.2f}{liquidity_note}, {result}, Profit: ${bet['profit']:+.2f}")
@@ -475,7 +621,9 @@ if __name__ == '__main__':
         max_bet_vs_volume=0.10,   # Max bet = 10% of market volume
         bankroll=1000,            # Start with $1000
         kelly_fraction=0.25,      # Use quarter Kelly
-        max_bet_pct=0.05          # Max 5% of bankroll per bet
+        max_bet_pct=0.05,         # Max 5% of bankroll per bet
+        enable_no_bets=True,      # Enable NO betting strategy
+        no_bet_min_distance=2     # Bet NO on ranges 2+ degrees away from forecast
     )
     
     print(f"\n{'='*70}")
